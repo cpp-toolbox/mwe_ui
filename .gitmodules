@@ -22,3 +22,12 @@
 [submodule "src/shader_standard"]
 	path = src/shader_standard
 	url = git@github.com:cpp-toolbox/shader_standard.git
+[submodule "src/ui"]
+	path = src/ui
+	url = git@github.com:cpp-toolbox/ui.git
+[submodule "src/font_atlas"]
+	path = src/font_atlas
+	url = git@github.com:cpp-toolbox/font_atlas.git
+[submodule "src/texture_atlas"]
+	path = src/texture_atlas
+	url = git@github.com:cpp-toolbox/texture_atlas.git
