@@ -58,3 +58,6 @@
 [submodule "src/utility/turns"]
 	path = src/utility/turns
 	url = git@github.com:cpp-toolbox/turns.git
+[submodule "src/graphics/grid_font"]
+	path = src/graphics/grid_font
+	url = git@github.com:cpp-toolbox/grid_font.git
