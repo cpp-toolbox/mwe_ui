@@ -18,6 +18,8 @@
 #include <cstdio>
 #include <cstdlib>
 
+Colors colors;
+
 int key_pressed_this_tick = GLFW_KEY_UNKNOWN;
 std::string key_to_string(int key) {
     static const std::unordered_map<int, std::string> key_map = {
@@ -28,8 +30,7 @@ std::string key_to_string(int key) {
         {GLFW_KEY_U, "u"}, {GLFW_KEY_V, "v"},    {GLFW_KEY_W, "w"}, {GLFW_KEY_X, "x"}, {GLFW_KEY_Y, "y"},
         {GLFW_KEY_Z, "z"}, {GLFW_KEY_0, "0"},    {GLFW_KEY_1, "1"}, {GLFW_KEY_2, "2"}, {GLFW_KEY_3, "3"},
         {GLFW_KEY_4, "4"}, {GLFW_KEY_5, "5"},    {GLFW_KEY_6, "6"}, {GLFW_KEY_7, "7"}, {GLFW_KEY_8, "8"},
-        {GLFW_KEY_9, "9"}, {GLFW_KEY_SPACE, " "}
-        // Add more keys if needed, like special characters or function keys
+        {GLFW_KEY_9, "9"}, {GLFW_KEY_SPACE, " "} // Add more keys if needed, like special characters or function keys
     };
 
     // Find the key in the map and return the corresponding string, or empty if not found
@@ -67,7 +68,7 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
     }
 }
 
-glm::vec2 get_ndc_mouse_pose(GLFWwindow *window, double xpos, double ypos) {
+glm::vec2 get_ndc_mouse_pos(GLFWwindow *window, double xpos, double ypos) {
     int width, height;
     glfwGetWindowSize(window, &width, &height);
 
@@ -76,79 +77,81 @@ glm::vec2 get_ndc_mouse_pose(GLFWwindow *window, double xpos, double ypos) {
 
 enum GameState { MAIN_MENU, IN_GAME, SETTINGS, CREDITS };
 
-void process_and_queue_render_ui(glm::vec2 ndc_mouse_pos, UI &curr_ui, Batcher &batcher) {
-    curr_ui.process_mouse_position(ndc_mouse_pos);
+#include <iostream> // Needed for std::cout
 
-    if (mouse_just_clicked) {
-        curr_ui.process_mouse_just_clicked(ndc_mouse_pos);
-    }
+class UIRenderSuiteImpl : public IUIRenderSuite {
+  public:
+    Batcher &batcher;
 
-    process_key_pressed_this_tick(curr_ui);
+    explicit UIRenderSuiteImpl(Batcher &batcher) : batcher(batcher) {}
 
-    for (auto &cb : curr_ui.get_colored_boxes()) {
+    void render_colored_box(const UIRect &cb) override {
+        std::cout << "Rendering UIRect (Colored Box), id = " << cb.ivpsc.id << std::endl;
         batcher.absolute_position_with_colored_vertex_shader_batcher.queue_draw(
-            cb.id, cb.ivpsc.indices, cb.ivpsc.xyz_positions, cb.ivpsc.rgb_colors,
+            cb.ivpsc.id, cb.ivpsc.indices, cb.ivpsc.xyz_positions, cb.ivpsc.rgb_colors,
             cb.modified_signal.has_just_changed());
     }
 
-    for (auto &tb : curr_ui.get_text_boxes()) {
-        batcher.transform_v_with_signed_distance_field_text_shader_batcher.queue_draw(
-            tb.id, tb.text_drawing_data.indices, tb.text_drawing_data.xyz_positions,
-            tb.text_drawing_data.texture_coordinates);
+    void render_text_box(const UITextBox &tb) override {
+        std::cout << "Rendering UITextBox (Text), id = " << tb.text_drawing_data.id << std::endl;
+        batcher.absolute_position_with_signed_distance_field_text_shader_batcher.queue_draw(
+            tb.text_drawing_data.id, tb.text_drawing_data.indices, tb.text_drawing_data.xyz_positions,
+            tb.text_drawing_data.texture_coordinates, tb.modified_signal.has_just_changed());
+
+        std::cout << "Rendering UITextBox (Background), id = " << tb.background_ivpsc.id << std::endl;
         batcher.absolute_position_with_colored_vertex_shader_batcher.queue_draw(
-            tb.id, tb.background_ivpsc.indices, tb.background_ivpsc.xyz_positions, tb.background_ivpsc.rgb_colors,
-            tb.modified_signal.has_just_changed());
+            tb.background_ivpsc.id, tb.background_ivpsc.indices, tb.background_ivpsc.xyz_positions,
+            tb.background_ivpsc.rgb_colors, tb.modified_signal.has_just_changed());
     }
 
-    for (auto &cr : curr_ui.get_clickable_text_boxes()) {
-        batcher.transform_v_with_signed_distance_field_text_shader_batcher.queue_draw(
-            cr.id, cr.text_drawing_data.indices, cr.text_drawing_data.xyz_positions,
+    void render_clickable_text_box(const UIClickableTextBox &cr) override {
+        std::cout << "Rendering UIClickableTextBox (Text), id = " << cr.text_drawing_data.id << std::endl;
+        batcher.absolute_position_with_signed_distance_field_text_shader_batcher.queue_draw(
+            cr.text_drawing_data.id, cr.text_drawing_data.indices, cr.text_drawing_data.xyz_positions,
             cr.text_drawing_data.texture_coordinates);
 
+        std::cout << "Rendering UIClickableTextBox (Background), id = " << cr.ivpsc.id << std::endl;
         batcher.absolute_position_with_colored_vertex_shader_batcher.queue_draw(
-            cr.id, cr.ivpsc.indices, cr.ivpsc.xyz_positions, cr.ivpsc.rgb_colors,
+            cr.ivpsc.id, cr.ivpsc.indices, cr.ivpsc.xyz_positions, cr.ivpsc.rgb_colors,
             cr.modified_signal.has_just_changed());
     }
 
-    for (auto &ib : curr_ui.get_input_boxes()) {
-
-        batcher.transform_v_with_signed_distance_field_text_shader_batcher.queue_draw(
-            ib.id, ib.text_drawing_data.indices, ib.text_drawing_data.xyz_positions,
+    void render_input_box(const UIInputBox &ib) override {
+        std::cout << "Rendering UIInputBox (Text), id = " << ib.text_drawing_data.id << std::endl;
+        batcher.absolute_position_with_signed_distance_field_text_shader_batcher.queue_draw(
+            ib.text_drawing_data.id, ib.text_drawing_data.indices, ib.text_drawing_data.xyz_positions,
             ib.text_drawing_data.texture_coordinates, ib.modified_signal.has_just_changed());
 
+        std::cout << "Rendering UIInputBox (Background), id = " << ib.background_ivpsc.id << std::endl;
         batcher.absolute_position_with_colored_vertex_shader_batcher.queue_draw(
-            ib.id, ib.background_ivpsc.indices, ib.background_ivpsc.xyz_positions, ib.background_ivpsc.rgb_colors,
-            ib.modified_signal.has_just_changed());
+            ib.background_ivpsc.id, ib.background_ivpsc.indices, ib.background_ivpsc.xyz_positions,
+            ib.background_ivpsc.rgb_colors, ib.modified_signal.has_just_changed());
     }
 
-    for (auto &dd : curr_ui.get_dropdowns()) {
-
-        batcher.transform_v_with_signed_distance_field_text_shader_batcher.queue_draw(
-            dd.id, dd.dropdown_text_data.indices, dd.dropdown_text_data.xyz_positions,
+    void render_dropdown(const UIDropdown &dd) override {
+        std::cout << "Rendering UIDropdown - disabled (commented out)" << std::endl;
+        std::cout << "Rendering UIDropdown (Text), id = " << dd.dropdown_text_data.id << std::endl;
+        batcher.absolute_position_with_signed_distance_field_text_shader_batcher.queue_draw(
+            dd.dropdown_text_data.id, dd.dropdown_text_data.indices, dd.dropdown_text_data.xyz_positions,
             dd.dropdown_text_data.texture_coordinates, dd.modified_signal.has_just_changed());
 
+        std::cout << "Rendering UIDropdown (Background), id = " << dd.dropdown_background.id << std::endl;
         batcher.absolute_position_with_colored_vertex_shader_batcher.queue_draw(
-            dd.id, dd.dropdown_background.indices, dd.dropdown_background.xyz_positions,
+            dd.dropdown_background.id, dd.dropdown_background.indices, dd.dropdown_background.xyz_positions,
             dd.dropdown_background.rgb_colors, dd.modified_signal.has_just_changed());
-
-        // render all the dropdowns if they're active
-        if (dd.dropdown_open) {
-            int num_dropdowns = dd.dropdown_option_rects.size();
-            for (int i = 0; i < num_dropdowns; i++) {
-                IVPSolidColor ivpsc = dd.dropdown_option_backgrounds[i];
-                IVPTextured ivpt = dd.dropdown_option_text_data[i];
-                unsigned int doid = dd.dropdown_doids[i];
-
-                batcher.transform_v_with_signed_distance_field_text_shader_batcher.queue_draw(
-                    doid, ivpt.indices, ivpt.xyz_positions, ivpt.texture_coordinates,
-                    dd.modified_signal.has_just_changed());
-
-                batcher.absolute_position_with_colored_vertex_shader_batcher.queue_draw(
-                    doid, ivpsc.indices, ivpsc.xyz_positions, ivpsc.rgb_colors, dd.modified_signal.has_just_changed());
-            }
-        }
     }
-}
+
+    void render_dropdown_option(const UIDropdown &dd, const draw_info::IVPSolidColor &ivpsc,
+                                const draw_info::IVPTextured &ivpt, unsigned int doid) override {
+        std::cout << "Rendering UIDropdownOption (Text), id = " << doid << std::endl;
+        batcher.absolute_position_with_signed_distance_field_text_shader_batcher.queue_draw(
+            ivpt.id, ivpt.indices, ivpt.xyz_positions, ivpt.texture_coordinates, dd.modified_signal.has_just_changed());
+
+        std::cout << "Rendering UIDropdownOption (Background), id = " << doid << std::endl;
+        batcher.absolute_position_with_colored_vertex_shader_batcher.queue_draw(
+            ivpsc.id, ivpsc.indices, ivpsc.xyz_positions, ivpsc.rgb_colors, dd.modified_signal.has_just_changed());
+    }
+};
 
 int main() {
 
@@ -184,35 +187,36 @@ int main() {
     glfwSetKeyCallback(window, key_callback);
 
     std::vector<ShaderType> requested_shaders = {ShaderType::ABSOLUTE_POSITION_WITH_COLORED_VERTEX,
-                                                 ShaderType::TRANSFORM_V_WITH_SIGNED_DISTANCE_FIELD_TEXT};
+                                                 ShaderType::ABSOLUTE_POSITION_WITH_SIGNED_DISTANCE_FIELD_TEXT};
 
     ShaderCache shader_cache(requested_shaders, sinks);
     Batcher batcher(shader_cache);
     FontAtlas font_atlas("assets/times_64_sdf_atlas_font_info.json", "assets/times_64_sdf_atlas.json",
                          "assets/times_64_sdf_atlas.png", SCREEN_WIDTH, false, true);
 
-    Colors colors;
-
     glm::mat4 projection = glm::mat4(1);
     auto text_color = glm::vec3(0.5, 0.5, 1);
     float char_width = 0.5;
     float edge_transition = 0.1;
 
-    glDisable(GL_DEPTH_TEST);
+    // glDisable(GL_DEPTH_TEST);
+    // glEnable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    shader_cache.use_shader_program(ShaderType::TRANSFORM_V_WITH_SIGNED_DISTANCE_FIELD_TEXT);
-    shader_cache.set_uniform(ShaderType::TRANSFORM_V_WITH_SIGNED_DISTANCE_FIELD_TEXT, ShaderUniformVariable::TRANSFORM,
-                             projection);
+    shader_cache.set_uniform(ShaderType::ABSOLUTE_POSITION_WITH_COLORED_VERTEX, ShaderUniformVariable::ASPECT_RATIO,
+                             glm::vec2(1, 1));
 
-    shader_cache.set_uniform(ShaderType::TRANSFORM_V_WITH_SIGNED_DISTANCE_FIELD_TEXT, ShaderUniformVariable::RGB_COLOR,
-                             text_color);
+    shader_cache.set_uniform(ShaderType::ABSOLUTE_POSITION_WITH_SIGNED_DISTANCE_FIELD_TEXT,
+                             ShaderUniformVariable::ASPECT_RATIO, glm::vec2(1, 1));
 
-    shader_cache.set_uniform(ShaderType::TRANSFORM_V_WITH_SIGNED_DISTANCE_FIELD_TEXT,
+    shader_cache.set_uniform(ShaderType::ABSOLUTE_POSITION_WITH_SIGNED_DISTANCE_FIELD_TEXT,
+                             ShaderUniformVariable::RGB_COLOR, text_color);
+
+    shader_cache.set_uniform(ShaderType::ABSOLUTE_POSITION_WITH_SIGNED_DISTANCE_FIELD_TEXT,
                              ShaderUniformVariable::CHARACTER_WIDTH, char_width);
 
-    shader_cache.set_uniform(ShaderType::TRANSFORM_V_WITH_SIGNED_DISTANCE_FIELD_TEXT,
+    shader_cache.set_uniform(ShaderType::ABSOLUTE_POSITION_WITH_SIGNED_DISTANCE_FIELD_TEXT,
                              ShaderUniformVariable::EDGE_TRANSITION_WIDTH, edge_transition);
 
     std::function<void()> on_game_start = [&]() { curr_state = {TreeState::IN_GAME}; };
@@ -222,14 +226,16 @@ int main() {
 
     std::function<void()> on_hover = [&]() {};
 
-    // main menu ui
-    UI main_menu_ui(font_atlas);
-    main_menu_ui.add_textbox("WELCOME TO FRAG-Z", 0, 0.75, 1, 0.25, colors.grey);
+    UIRenderSuiteImpl ui_render_suite(batcher);
 
-    Grid grid(4, 1, 0.5, 0.5);
+    // main menu ui
+    UI main_menu_ui(font_atlas, batcher.absolute_position_with_colored_vertex_shader_batcher.object_id_generator,
+                    batcher.absolute_position_with_signed_distance_field_text_shader_batcher.object_id_generator);
+    main_menu_ui.add_textbox("Welcome to the program.", 0, 0.75, 1, 0.25, colors.grey);
+
+    vertex_geometry::Grid grid(4, 1, 0.5, 0.5);
     auto frag_time_rect = grid.get_at(0, 0);
-    main_menu_ui.add_clickable_textbox(on_game_start, on_hover, "FRAG TIME", frag_time_rect, colors.darkgreen,
-                                       colors.green);
+    main_menu_ui.add_clickable_textbox(on_game_start, on_hover, "RUN", frag_time_rect, colors.darkgreen, colors.green);
 
     auto settings_rect = grid.get_at(0, 1);
     main_menu_ui.add_clickable_textbox(on_click_settings, on_hover, "SETTINGS", settings_rect, colors.darkblue,
@@ -242,21 +248,23 @@ int main() {
     main_menu_ui.add_clickable_textbox(on_game_quit, on_hover, "QUIT", exit_rect, colors.darkred, colors.red);
 
     // in game ui
-    UI in_game_ui(font_atlas);
+    UI in_game_ui(font_atlas, batcher.absolute_position_with_colored_vertex_shader_batcher.object_id_generator,
+                  batcher.absolute_position_with_signed_distance_field_text_shader_batcher.object_id_generator);
     std::function<void(std::string)> on_confirm = [&](std::string contents) { std::cout << contents << std::endl; };
     in_game_ui.add_input_box(on_confirm, "password", 0, 0.25, 1, 0.25, colors.grey, colors.lightgrey);
     in_game_ui.add_clickable_textbox(on_back_clicked, on_hover, "back to main menu", -0.65, -0.65, 0.5, 0.5,
                                      colors.seagreen, colors.grey);
 
     // settings ui
-    UI settings_menu_ui(font_atlas);
+    UI settings_menu_ui(font_atlas, batcher.absolute_position_with_colored_vertex_shader_batcher.object_id_generator,
+                        batcher.absolute_position_with_signed_distance_field_text_shader_batcher.object_id_generator);
     /*settings_menu_ui.*/
 
-    Rectangle settings_menu_rect(glm::vec3(0, 0, 0), 1.5, 1.5);
-    std::vector<Rectangle> settings_menu = weighted_subdivision(settings_menu_rect, {1, 3}, true);
+    vertex_geometry::Rectangle settings_menu_rect(glm::vec3(0, 0, 0), 1.5, 1.5);
+    std::vector<vertex_geometry::Rectangle> settings_menu = weighted_subdivision(settings_menu_rect, {1, 3}, true);
     /*Rectangle main_area_rect = create_rectangle_from_corners(*/
 
-    Grid top_row_grid(1, 5, settings_menu.at(0));
+    vertex_geometry::Grid top_row_grid(1, 5, settings_menu.at(0));
 
     std::function<void()> settings_on_click = []() {};
     std::function<void()> settings_on_hover = []() {};
@@ -286,16 +294,17 @@ int main() {
     settings_menu_ui.add_clickable_textbox(network_on_click, settings_on_hover, "network", network_rect,
                                            colors.darkblue, colors.blue);
 
-    Rectangle main_settings_rect = settings_menu.at(1);
+    vertex_geometry::Rectangle main_settings_rect = settings_menu.at(1);
     settings_menu_ui.add_colored_rectangle(main_settings_rect, colors.grey);
 
-    Rectangle go_back_rect = create_rectangle_from_corners(glm::vec3(-1, -0.75, 0), glm::vec3(-0.75, -0.75, 0),
-                                                           glm::vec3(-1, -1, 0), glm::vec3(-0.75, -1, 0));
+    vertex_geometry::Rectangle go_back_rect = vertex_geometry::create_rectangle_from_corners(
+        glm::vec3(-1, -0.75, 0), glm::vec3(-0.75, -0.75, 0), glm::vec3(-1, -1, 0), glm::vec3(-0.75, -1, 0));
     settings_menu_ui.add_clickable_textbox(on_back_clicked, on_hover, "BACK", go_back_rect, colors.darkred, colors.red);
 
-    Grid main_settings_grid(7, 3, main_settings_rect);
+    vertex_geometry::Grid main_settings_grid(7, 3, main_settings_rect);
 
-    UI player_settings_ui(font_atlas);
+    UI player_settings_ui(font_atlas, batcher.absolute_position_with_colored_vertex_shader_batcher.object_id_generator,
+                          batcher.absolute_position_with_signed_distance_field_text_shader_batcher.object_id_generator);
 
     std::function<void(std::string)> username_on_confirm = [](std::string s) {};
     player_settings_ui.add_textbox("username", main_settings_grid.get_at(0, 0), colors.maroon);
@@ -303,8 +312,9 @@ int main() {
                                      colors.orangered);
     player_settings_ui.add_textbox("crosshair", main_settings_grid.get_at(0, 1), colors.maroon);
 
-    Grid input_settings_grid(10, 3, main_settings_rect);
-    UI input_settings_ui(font_atlas);
+    vertex_geometry::Grid input_settings_grid(10, 3, main_settings_rect);
+    UI input_settings_ui(font_atlas, batcher.absolute_position_with_colored_vertex_shader_batcher.object_id_generator,
+                         batcher.absolute_position_with_signed_distance_field_text_shader_batcher.object_id_generator);
     input_settings_ui.add_textbox("mouse sensitivity", input_settings_grid.get_at(0, 0), colors.maroon);
     input_settings_ui.add_textbox("fire", input_settings_grid.get_at(0, 1), colors.maroon);
     input_settings_ui.add_textbox("jump", input_settings_grid.get_at(0, 2), colors.maroon);
@@ -316,12 +326,15 @@ int main() {
     input_settings_ui.add_textbox("select weapon 2", input_settings_grid.get_at(0, 8), colors.maroon);
     input_settings_ui.add_textbox("select weapon 3", input_settings_grid.get_at(0, 9), colors.maroon);
 
-    Grid sound_settings_grid(1, 3, main_settings_rect);
-    UI sound_settings_ui(font_atlas);
+    vertex_geometry::Grid sound_settings_grid(1, 3, main_settings_rect);
+    UI sound_settings_ui(font_atlas, batcher.absolute_position_with_colored_vertex_shader_batcher.object_id_generator,
+                         batcher.absolute_position_with_signed_distance_field_text_shader_batcher.object_id_generator);
     sound_settings_ui.add_textbox("volume", sound_settings_grid.get_at(0, 0), colors.maroon);
 
-    Grid graphics_settings_grid(5, 3, main_settings_rect);
-    UI graphics_settings_ui(font_atlas);
+    vertex_geometry::Grid graphics_settings_grid(5, 3, main_settings_rect);
+    UI graphics_settings_ui(
+        font_atlas, batcher.absolute_position_with_colored_vertex_shader_batcher.object_id_generator,
+        batcher.absolute_position_with_signed_distance_field_text_shader_batcher.object_id_generator);
 
     std::vector<std::string> options = {"800x600", "1024x1024"};
     std::vector<std::function<void()>> option_on_clicks = {[]() {}, []() {}};
@@ -336,8 +349,8 @@ int main() {
                                       colors.orange, colors.orangered, lighting_options, lighting_option_on_clicks);
 
     graphics_settings_ui.add_textbox("fov", graphics_settings_grid.get_at(0, 2), colors.maroon);
-    in_game_ui.add_input_box(on_confirm, "enter fov", graphics_settings_grid.get_at(2, 2), colors.grey,
-                             colors.lightgrey);
+    graphics_settings_ui.add_input_box(on_confirm, "enter fov", graphics_settings_grid.get_at(2, 2), colors.grey,
+                                       colors.lightgrey);
 
     std::vector<std::string> yes_no_options = {"yes", "no"};
     std::vector<std::function<void()>> viewmodel_options_on_click = {[]() {}, []() {}};
@@ -350,8 +363,10 @@ int main() {
     graphics_settings_ui.add_dropdown(on_click_settings, on_hover, "yes", graphics_settings_grid.get_at(2, 4),
                                       colors.orange, colors.orangered, yes_no_options, fps_options_on_click);
 
-    Grid advanced_settings_grid(3, 3, main_settings_rect);
-    UI advanced_settings_ui(font_atlas);
+    vertex_geometry::Grid advanced_settings_grid(3, 3, main_settings_rect);
+    UI advanced_settings_ui(
+        font_atlas, batcher.absolute_position_with_colored_vertex_shader_batcher.object_id_generator,
+        batcher.absolute_position_with_signed_distance_field_text_shader_batcher.object_id_generator);
     advanced_settings_ui.add_textbox("display tick time expendature", advanced_settings_grid.get_at(0, 0),
                                      colors.maroon);
     advanced_settings_ui.add_textbox("display current ping", advanced_settings_grid.get_at(0, 1), colors.maroon);
@@ -379,7 +394,7 @@ int main() {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         auto ndc_mouse_pos =
-            get_ndc_mouse_pose(window, live_input_state.mouse_position_x, live_input_state.mouse_position_y);
+            get_ndc_mouse_pos(window, live_input_state.mouse_position_x, live_input_state.mouse_position_y);
 
         // here we render all ui's and ui's that are ancestor ones
         std::vector<TreeState> incremental_path;
@@ -387,12 +402,15 @@ int main() {
             incremental_path.push_back(ts);
             if (game_state_to_ui.find(incremental_path) != game_state_to_ui.end()) {
                 UI &ancestor_ui = game_state_to_ui.at(incremental_path);
-                process_and_queue_render_ui(ndc_mouse_pos, ancestor_ui, batcher);
+
+                // TODO: use input state thing and then actually fill this out with non mock data
+                process_and_queue_render_ui(ndc_mouse_pos, ancestor_ui, ui_render_suite, {}, false, false,
+                                            mouse_just_clicked);
             }
         }
 
         batcher.absolute_position_with_colored_vertex_shader_batcher.draw_everything();
-        batcher.transform_v_with_signed_distance_field_text_shader_batcher.draw_everything();
+        batcher.absolute_position_with_signed_distance_field_text_shader_batcher.draw_everything();
 
         mouse_just_clicked = false;
 

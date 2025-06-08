@@ -52,3 +52,9 @@
 [submodule "src/utility/state_tree"]
 	path = src/utility/state_tree
 	url = git@github.com:cpp-toolbox/state_tree.git
+[submodule "src/utility/glm_printing"]
+	path = src/utility/glm_printing
+	url = git@github.com:cpp-toolbox/glm_printing.git
+[submodule "src/utility/turns"]
+	path = src/utility/turns
+	url = git@github.com:cpp-toolbox/turns.git
