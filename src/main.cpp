@@ -133,6 +133,7 @@ class UIRenderSuiteImpl : public IUIRenderSuite {
 
     void render_dropdown_option(const UIDropdown &dd, const draw_info::IVPSolidColor &ivpsc,
                                 const draw_info::IVPSolidColor &text_ivpsc, unsigned int doid) override {
+
         batcher.absolute_position_with_colored_vertex_shader_batcher.queue_draw(
             text_ivpsc.id, text_ivpsc.indices, text_ivpsc.xyz_positions, text_ivpsc.rgb_colors,
             dd.modified_signal.has_just_changed());
@@ -141,6 +142,258 @@ class UIRenderSuiteImpl : public IUIRenderSuite {
             ivpsc.id, ivpsc.indices, ivpsc.xyz_positions, ivpsc.rgb_colors, dd.modified_signal.has_just_changed());
     }
 };
+
+UI create_main_menu_ui(std::vector<TreeState> &curr_state, GLFWwindow *window, Batcher &batcher) {
+
+    std::function<void()> on_game_start = [&]() { curr_state = {TreeState::IN_GAME}; };
+    std::function<void()> on_click_settings = [&]() { curr_state = {TreeState::SETTINGS, TreeState::PLAYER}; };
+    std::function<void()> on_game_quit = [&]() { glfwSetWindowShouldClose(window, GLFW_TRUE); };
+    std::function<void()> on_back_clicked = [&]() { curr_state = {TreeState::MAIN_MENU}; };
+    std::function<void()> on_hover = [&]() {};
+
+    UIRenderSuiteImpl ui_render_suite(batcher);
+
+    // main menu ui
+    UI main_menu_ui(0, batcher.absolute_position_with_colored_vertex_shader_batcher.object_id_generator);
+    main_menu_ui.add_textbox("Welcome to the program.", 0, 0.75, 1, 0.25, colors.grey);
+
+    vertex_geometry::Grid grid(4, 1, 0.5, 0.5);
+    auto frag_time_rect = grid.get_at(0, 0);
+    main_menu_ui.add_clickable_textbox(on_game_start, on_hover, "RUN", frag_time_rect, colors.darkgreen, colors.green);
+
+    auto settings_rect = grid.get_at(0, 1);
+    main_menu_ui.add_clickable_textbox(on_click_settings, on_hover, "SETTINGS", settings_rect, colors.darkblue,
+                                       colors.blue);
+
+    auto credits_rect = grid.get_at(0, 2);
+    main_menu_ui.add_clickable_textbox(on_game_quit, on_hover, "CREDITS", credits_rect, colors.darkblue, colors.blue);
+
+    auto exit_rect = grid.get_at(0, 3);
+    main_menu_ui.add_clickable_textbox(on_game_quit, on_hover, "QUIT", exit_rect, colors.darkred, colors.red);
+
+    return main_menu_ui;
+}
+
+UI create_in_game_ui(std::vector<TreeState> &curr_state, Batcher &batcher) {
+
+    std::function<void()> on_back_clicked = [&]() { curr_state = {TreeState::MAIN_MENU}; };
+    std::function<void()> on_hover = [&]() {};
+
+    UI in_game_ui(0, batcher.absolute_position_with_colored_vertex_shader_batcher.object_id_generator);
+    std::function<void(std::string)> on_confirm = [&](std::string contents) { std::cout << contents << std::endl; };
+    in_game_ui.add_input_box(on_confirm, "password", 0, 0.25, 1, 0.25, colors.grey, colors.lightgrey);
+    in_game_ui.add_clickable_textbox(on_back_clicked, on_hover, "back to main menu", -0.65, -0.65, 0.5, 0.5,
+                                     colors.seagreen, colors.grey);
+
+    return in_game_ui;
+}
+
+UI create_settings_menu_ui(std::vector<TreeState> &curr_state, Batcher &batcher) {
+    UI settings_menu_ui(0, batcher.absolute_position_with_colored_vertex_shader_batcher.object_id_generator);
+
+    vertex_geometry::Rectangle settings_menu_rect(glm::vec3(0, 0, 0), 1.5, 1.5);
+    std::vector<vertex_geometry::Rectangle> settings_menu = weighted_subdivision(settings_menu_rect, {1, 3}, true);
+    /*Rectangle main_area_rect = create_rectangle_from_corners(*/
+
+    vertex_geometry::Grid top_row_grid(1, 5, settings_menu.at(0));
+
+    std::function<void()> on_back_clicked = [&]() { curr_state = {TreeState::MAIN_MENU}; };
+    std::function<void()> on_apply_clicked = [&]() {};
+    std::function<void()> on_hover = [&]() {};
+    std::function<void()> settings_on_click = []() {};
+    std::function<void()> settings_on_hover = []() {};
+
+    std::function<void()> player_on_click = [&]() { curr_state = {TreeState::SETTINGS, TreeState::PLAYER}; };
+    auto player_rect = top_row_grid.get_at(0, 0);
+    settings_menu_ui.add_clickable_textbox(player_on_click, settings_on_hover, "player", player_rect, colors.darkblue,
+                                           colors.blue);
+
+    std::function<void()> input_on_click = [&]() { curr_state = {TreeState::SETTINGS, TreeState::INPUT}; };
+    auto input_rect = top_row_grid.get_at(1, 0);
+    settings_menu_ui.add_clickable_textbox(input_on_click, settings_on_hover, "input", input_rect, colors.darkblue,
+                                           colors.blue);
+
+    std::function<void()> sound_on_click = [&]() { curr_state = {TreeState::SETTINGS, TreeState::SOUND}; };
+    auto sound_rect = top_row_grid.get_at(2, 0);
+    settings_menu_ui.add_clickable_textbox(sound_on_click, settings_on_hover, "sound", sound_rect, colors.darkblue,
+                                           colors.blue);
+
+    std::function<void()> graphics_on_click = [&]() { curr_state = {TreeState::SETTINGS, TreeState::GRAPHICS}; };
+    auto graphics_rect = top_row_grid.get_at(3, 0);
+    settings_menu_ui.add_clickable_textbox(graphics_on_click, settings_on_hover, "graphics", graphics_rect,
+                                           colors.darkblue, colors.blue);
+
+    std::function<void()> network_on_click = [&]() { curr_state = {TreeState::SETTINGS, TreeState::ADVANCED}; };
+    auto network_rect = top_row_grid.get_at(4, 0);
+    settings_menu_ui.add_clickable_textbox(network_on_click, settings_on_hover, "network", network_rect,
+                                           colors.darkblue, colors.blue);
+
+    vertex_geometry::Rectangle main_settings_rect = settings_menu.at(1);
+    settings_menu_ui.add_colored_rectangle(main_settings_rect, colors.grey);
+
+    vertex_geometry::Rectangle go_back_rect = vertex_geometry::create_rectangle_from_corners(
+        glm::vec3(-1, -0.75, 0), glm::vec3(-0.75, -0.75, 0), glm::vec3(-1, -1, 0), glm::vec3(-0.75, -1, 0));
+    settings_menu_ui.add_clickable_textbox(on_back_clicked, on_hover, "BACK", go_back_rect, colors.darkred, colors.red);
+
+    vertex_geometry::Rectangle apply_rect = vertex_geometry::create_rectangle_from_corners(
+        glm::vec3(1, -0.75, 0), glm::vec3(0.75, -0.75, 0), glm::vec3(1, -1, 0), glm::vec3(0.75, -1, 0));
+    settings_menu_ui.add_clickable_textbox(on_apply_clicked, on_hover, "APPLY", apply_rect, colors.darkgreen,
+                                           colors.green);
+
+    vertex_geometry::Grid main_settings_grid(7, 3, main_settings_rect);
+
+    return settings_menu_ui;
+}
+
+UI create_player_settings_ui(Batcher &batcher) {
+
+    std::function<void(std::string)> on_confirm = [&](std::string contents) { std::cout << contents << std::endl; };
+
+    UI player_settings_ui(-0.1, batcher.absolute_position_with_colored_vertex_shader_batcher.object_id_generator);
+
+    vertex_geometry::Rectangle settings_menu_rect(glm::vec3(0, 0, 0), 1.5, 1.5);
+    std::vector<vertex_geometry::Rectangle> settings_menu = weighted_subdivision(settings_menu_rect, {1, 3}, true);
+    vertex_geometry::Rectangle main_settings_rect = settings_menu.at(1);
+    vertex_geometry::Grid main_settings_grid(7, 3, main_settings_rect);
+
+    std::function<void(std::string)> username_on_confirm = [](std::string s) {};
+    player_settings_ui.add_textbox("username", main_settings_grid.get_at(0, 0), colors.maroon);
+    player_settings_ui.add_input_box(on_confirm, "username", main_settings_grid.get_at(2, 0), colors.orange,
+                                     colors.orangered);
+    player_settings_ui.add_textbox("crosshair", main_settings_grid.get_at(0, 1), colors.maroon);
+
+    vertex_geometry::Grid input_settings_grid(10, 3, main_settings_rect);
+
+    return player_settings_ui;
+}
+
+UI create_input_settings_ui(Batcher &batcher) {
+
+    vertex_geometry::Rectangle settings_menu_rect(glm::vec3(0, 0, 0), 1.5, 1.5);
+    std::vector<vertex_geometry::Rectangle> settings_menu = weighted_subdivision(settings_menu_rect, {1, 3}, true);
+    vertex_geometry::Rectangle main_settings_rect = settings_menu.at(1);
+    vertex_geometry::Grid main_settings_grid(7, 3, main_settings_rect);
+
+    vertex_geometry::Grid input_settings_grid(10, 3, main_settings_rect);
+    UI input_settings_ui(-0.1, batcher.absolute_position_with_colored_vertex_shader_batcher.object_id_generator);
+    input_settings_ui.add_textbox("mouse sensitivity", input_settings_grid.get_at(0, 0), colors.maroon);
+    input_settings_ui.add_textbox("fire", input_settings_grid.get_at(0, 1), colors.maroon);
+    input_settings_ui.add_textbox("jump", input_settings_grid.get_at(0, 2), colors.maroon);
+    input_settings_ui.add_textbox("move forward", input_settings_grid.get_at(0, 3), colors.maroon);
+    input_settings_ui.add_textbox("move backward", input_settings_grid.get_at(0, 4), colors.maroon);
+    input_settings_ui.add_textbox("move left", input_settings_grid.get_at(0, 5), colors.maroon);
+    input_settings_ui.add_textbox("move right", input_settings_grid.get_at(0, 6), colors.maroon);
+    input_settings_ui.add_textbox("select weapon 1", input_settings_grid.get_at(0, 7), colors.maroon);
+    input_settings_ui.add_textbox("select weapon 2", input_settings_grid.get_at(0, 8), colors.maroon);
+    input_settings_ui.add_textbox("select weapon 3", input_settings_grid.get_at(0, 9), colors.maroon);
+
+    return input_settings_ui;
+}
+
+UI create_sound_settings_ui(Batcher &batcher) {
+    vertex_geometry::Rectangle settings_menu_rect(glm::vec3(0, 0, 0), 1.5, 1.5);
+    std::vector<vertex_geometry::Rectangle> settings_menu = weighted_subdivision(settings_menu_rect, {1, 3}, true);
+    vertex_geometry::Rectangle main_settings_rect = settings_menu.at(1);
+    vertex_geometry::Grid main_settings_grid(7, 3, main_settings_rect);
+
+    vertex_geometry::Grid sound_settings_grid(1, 3, main_settings_rect);
+    UI sound_settings_ui(-0.1, batcher.absolute_position_with_colored_vertex_shader_batcher.object_id_generator);
+    sound_settings_ui.add_textbox("volume", sound_settings_grid.get_at(0, 0), colors.maroon);
+    return sound_settings_ui;
+}
+
+UI create_graphics_settings_ui(std::vector<TreeState> &curr_state, Batcher &batcher) {
+
+    std::function<void(std::string)> on_confirm = [&](std::string contents) { std::cout << contents << std::endl; };
+    std::function<void()> on_hover = [&]() {};
+
+    vertex_geometry::Rectangle settings_menu_rect(glm::vec3(0, 0, 0), 1.5, 1.5);
+    std::vector<vertex_geometry::Rectangle> settings_menu = weighted_subdivision(settings_menu_rect, {1, 3}, true);
+    vertex_geometry::Rectangle main_settings_rect = settings_menu.at(1);
+    vertex_geometry::Grid main_settings_grid(7, 3, main_settings_rect);
+
+    std::function<void()> on_click_settings = [&]() { curr_state = {TreeState::SETTINGS, TreeState::PLAYER}; };
+
+    vertex_geometry::Grid graphics_settings_grid(5, 3, main_settings_rect);
+    UI graphics_settings_ui(-0.1, batcher.absolute_position_with_colored_vertex_shader_batcher.object_id_generator);
+
+    std::vector<std::string> options = {"800x600", "1024x1024"};
+    std::vector<std::function<void()>> option_on_clicks = {[]() {}, []() {}};
+    graphics_settings_ui.add_textbox("resolution", graphics_settings_grid.get_at(0, 0), colors.maroon);
+    graphics_settings_ui.add_dropdown(on_click_settings, on_hover, "1920x1080", graphics_settings_grid.get_at(2, 0),
+                                      colors.orange, colors.orangered, options, option_on_clicks);
+
+    std::vector<std::string> lighting_options = {"none", "early 2000s"};
+    std::vector<std::function<void()>> lighting_option_on_clicks = {[]() {}, []() {}};
+    graphics_settings_ui.add_textbox("lighting", graphics_settings_grid.get_at(0, 1), colors.maroon);
+    graphics_settings_ui.add_dropdown(on_click_settings, on_hover, "lighting", graphics_settings_grid.get_at(2, 1),
+                                      colors.orange, colors.orangered, lighting_options, lighting_option_on_clicks);
+
+    graphics_settings_ui.add_textbox("fov", graphics_settings_grid.get_at(0, 2), colors.maroon);
+    graphics_settings_ui.add_input_box(on_confirm, "enter fov", graphics_settings_grid.get_at(2, 2), colors.grey,
+                                       colors.lightgrey);
+
+    std::vector<std::string> yes_no_options = {"yes", "no"};
+    std::vector<std::function<void()>> viewmodel_options_on_click = {[]() {}, []() {}};
+    graphics_settings_ui.add_textbox("enable view model", graphics_settings_grid.get_at(0, 3), colors.maroon);
+    graphics_settings_ui.add_dropdown(on_click_settings, on_hover, "yes", graphics_settings_grid.get_at(2, 3),
+                                      colors.orange, colors.orangered, yes_no_options, viewmodel_options_on_click);
+
+    std::vector<std::function<void()>> fps_options_on_click = {[]() {}, []() {}};
+    graphics_settings_ui.add_textbox("show fps", graphics_settings_grid.get_at(0, 4), colors.maroon);
+    graphics_settings_ui.add_dropdown(on_click_settings, on_hover, "yes", graphics_settings_grid.get_at(2, 4),
+                                      colors.orange, colors.orangered, yes_no_options, fps_options_on_click);
+
+    return graphics_settings_ui;
+}
+
+UI create_advanced_settings_ui(Batcher &batcher) {
+
+    vertex_geometry::Rectangle settings_menu_rect(glm::vec3(0, 0, 0), 1.5, 1.5);
+    std::vector<vertex_geometry::Rectangle> settings_menu = weighted_subdivision(settings_menu_rect, {1, 3}, true);
+    vertex_geometry::Rectangle main_settings_rect = settings_menu.at(1);
+    vertex_geometry::Grid main_settings_grid(7, 3, main_settings_rect);
+
+    vertex_geometry::Grid advanced_settings_grid(3, 3, main_settings_rect);
+    UI advanced_settings_ui(-0.1, batcher.absolute_position_with_colored_vertex_shader_batcher.object_id_generator);
+    advanced_settings_ui.add_textbox("display tick time expendature", advanced_settings_grid.get_at(0, 0),
+                                     colors.maroon);
+    advanced_settings_ui.add_textbox("display current ping", advanced_settings_grid.get_at(0, 1), colors.maroon);
+    advanced_settings_ui.add_textbox("display movement dial", advanced_settings_grid.get_at(0, 2), colors.maroon);
+
+    return advanced_settings_ui;
+}
+
+#include <iostream>
+
+struct VideoMode {
+    int width;
+    int height;
+    int refresh_rate;
+
+    friend std::ostream &operator<<(std::ostream &os, const VideoMode &vm) {
+        os << vm.width << "x" << vm.height << " @ " << vm.refresh_rate << "Hz";
+        return os;
+    }
+};
+
+std::vector<VideoMode> get_available_video_modes(GLFWmonitor *monitor) {
+    std::vector<VideoMode> modes_out;
+
+    if (!monitor) {
+        std::cerr << "Invalid monitor pointer.\n";
+        return modes_out;
+    }
+
+    int count;
+    const GLFWvidmode *modes = glfwGetVideoModes(monitor, &count);
+
+    for (int i = 0; i < count; ++i) {
+        modes_out.push_back({modes[i].width, modes[i].height, modes[i].refreshRate});
+    }
+
+    return modes_out;
+}
 
 int main() {
 
@@ -174,6 +427,13 @@ int main() {
                                                                 start_in_fullscreen, false, false, &live_input_state);
     glfwSetMouseButtonCallback(window, mouse_button_callback);
     glfwSetKeyCallback(window, key_callback);
+
+    GLFWmonitor *monitor = glfwGetPrimaryMonitor();
+    auto video_modes = get_available_video_modes(monitor);
+
+    for (size_t i = 0; i < video_modes.size(); ++i) {
+        std::cout << "Mode " << i << ": " << video_modes[i] << "\n";
+    }
 
     std::vector<ShaderType> requested_shaders = {ShaderType::ABSOLUTE_POSITION_WITH_COLORED_VERTEX,
                                                  ShaderType::ABSOLUTE_POSITION_WITH_SIGNED_DISTANCE_FIELD_TEXT};
@@ -217,139 +477,14 @@ int main() {
 
     UIRenderSuiteImpl ui_render_suite(batcher);
 
-    // main menu ui
-    UI main_menu_ui(0, batcher.absolute_position_with_colored_vertex_shader_batcher.object_id_generator);
-    main_menu_ui.add_textbox("Welcome to the program.", 0, 0.75, 1, 0.25, colors.grey);
-
-    vertex_geometry::Grid grid(4, 1, 0.5, 0.5);
-    auto frag_time_rect = grid.get_at(0, 0);
-    main_menu_ui.add_clickable_textbox(on_game_start, on_hover, "RUN", frag_time_rect, colors.darkgreen, colors.green);
-
-    auto settings_rect = grid.get_at(0, 1);
-    main_menu_ui.add_clickable_textbox(on_click_settings, on_hover, "SETTINGS", settings_rect, colors.darkblue,
-                                       colors.blue);
-
-    auto credits_rect = grid.get_at(0, 2);
-    main_menu_ui.add_clickable_textbox(on_game_quit, on_hover, "CREDITS", credits_rect, colors.darkblue, colors.blue);
-
-    auto exit_rect = grid.get_at(0, 3);
-    main_menu_ui.add_clickable_textbox(on_game_quit, on_hover, "QUIT", exit_rect, colors.darkred, colors.red);
-
-    // in game ui
-    UI in_game_ui(0, batcher.absolute_position_with_colored_vertex_shader_batcher.object_id_generator);
-    std::function<void(std::string)> on_confirm = [&](std::string contents) { std::cout << contents << std::endl; };
-    in_game_ui.add_input_box(on_confirm, "password", 0, 0.25, 1, 0.25, colors.grey, colors.lightgrey);
-    in_game_ui.add_clickable_textbox(on_back_clicked, on_hover, "back to main menu", -0.65, -0.65, 0.5, 0.5,
-                                     colors.seagreen, colors.grey);
-
-    // settings ui
-    UI settings_menu_ui(0, batcher.absolute_position_with_colored_vertex_shader_batcher.object_id_generator);
-    /*settings_menu_ui.*/
-
-    vertex_geometry::Rectangle settings_menu_rect(glm::vec3(0, 0, 0), 1.5, 1.5);
-    std::vector<vertex_geometry::Rectangle> settings_menu = weighted_subdivision(settings_menu_rect, {1, 3}, true);
-    /*Rectangle main_area_rect = create_rectangle_from_corners(*/
-
-    vertex_geometry::Grid top_row_grid(1, 5, settings_menu.at(0));
-
-    std::function<void()> settings_on_click = []() {};
-    std::function<void()> settings_on_hover = []() {};
-
-    std::function<void()> player_on_click = [&]() { curr_state = {TreeState::SETTINGS, TreeState::PLAYER}; };
-    auto player_rect = top_row_grid.get_at(0, 0);
-    settings_menu_ui.add_clickable_textbox(player_on_click, settings_on_hover, "player", player_rect, colors.darkblue,
-                                           colors.blue);
-
-    std::function<void()> input_on_click = [&]() { curr_state = {TreeState::SETTINGS, TreeState::INPUT}; };
-    auto input_rect = top_row_grid.get_at(1, 0);
-    settings_menu_ui.add_clickable_textbox(input_on_click, settings_on_hover, "input", input_rect, colors.darkblue,
-                                           colors.blue);
-
-    std::function<void()> sound_on_click = [&]() { curr_state = {TreeState::SETTINGS, TreeState::SOUND}; };
-    auto sound_rect = top_row_grid.get_at(2, 0);
-    settings_menu_ui.add_clickable_textbox(sound_on_click, settings_on_hover, "sound", sound_rect, colors.darkblue,
-                                           colors.blue);
-
-    std::function<void()> graphics_on_click = [&]() { curr_state = {TreeState::SETTINGS, TreeState::GRAPHICS}; };
-    auto graphics_rect = top_row_grid.get_at(3, 0);
-    settings_menu_ui.add_clickable_textbox(graphics_on_click, settings_on_hover, "graphics", graphics_rect,
-                                           colors.darkblue, colors.blue);
-
-    std::function<void()> network_on_click = [&]() { curr_state = {TreeState::SETTINGS, TreeState::ADVANCED}; };
-    auto network_rect = top_row_grid.get_at(4, 0);
-    settings_menu_ui.add_clickable_textbox(network_on_click, settings_on_hover, "network", network_rect,
-                                           colors.darkblue, colors.blue);
-
-    vertex_geometry::Rectangle main_settings_rect = settings_menu.at(1);
-    settings_menu_ui.add_colored_rectangle(main_settings_rect, colors.grey);
-
-    vertex_geometry::Rectangle go_back_rect = vertex_geometry::create_rectangle_from_corners(
-        glm::vec3(-1, -0.75, 0), glm::vec3(-0.75, -0.75, 0), glm::vec3(-1, -1, 0), glm::vec3(-0.75, -1, 0));
-    settings_menu_ui.add_clickable_textbox(on_back_clicked, on_hover, "BACK", go_back_rect, colors.darkred, colors.red);
-
-    vertex_geometry::Grid main_settings_grid(7, 3, main_settings_rect);
-
-    UI player_settings_ui(-0.1, batcher.absolute_position_with_colored_vertex_shader_batcher.object_id_generator);
-
-    std::function<void(std::string)> username_on_confirm = [](std::string s) {};
-    player_settings_ui.add_textbox("username", main_settings_grid.get_at(0, 0), colors.maroon);
-    player_settings_ui.add_input_box(on_confirm, "username", main_settings_grid.get_at(2, 0), colors.orange,
-                                     colors.orangered);
-    player_settings_ui.add_textbox("crosshair", main_settings_grid.get_at(0, 1), colors.maroon);
-
-    vertex_geometry::Grid input_settings_grid(10, 3, main_settings_rect);
-    UI input_settings_ui(-0.1, batcher.absolute_position_with_colored_vertex_shader_batcher.object_id_generator);
-    input_settings_ui.add_textbox("mouse sensitivity", input_settings_grid.get_at(0, 0), colors.maroon);
-    input_settings_ui.add_textbox("fire", input_settings_grid.get_at(0, 1), colors.maroon);
-    input_settings_ui.add_textbox("jump", input_settings_grid.get_at(0, 2), colors.maroon);
-    input_settings_ui.add_textbox("move forward", input_settings_grid.get_at(0, 3), colors.maroon);
-    input_settings_ui.add_textbox("move backward", input_settings_grid.get_at(0, 4), colors.maroon);
-    input_settings_ui.add_textbox("move left", input_settings_grid.get_at(0, 5), colors.maroon);
-    input_settings_ui.add_textbox("move right", input_settings_grid.get_at(0, 6), colors.maroon);
-    input_settings_ui.add_textbox("select weapon 1", input_settings_grid.get_at(0, 7), colors.maroon);
-    input_settings_ui.add_textbox("select weapon 2", input_settings_grid.get_at(0, 8), colors.maroon);
-    input_settings_ui.add_textbox("select weapon 3", input_settings_grid.get_at(0, 9), colors.maroon);
-
-    vertex_geometry::Grid sound_settings_grid(1, 3, main_settings_rect);
-    UI sound_settings_ui(-0.1, batcher.absolute_position_with_colored_vertex_shader_batcher.object_id_generator);
-    sound_settings_ui.add_textbox("volume", sound_settings_grid.get_at(0, 0), colors.maroon);
-
-    vertex_geometry::Grid graphics_settings_grid(5, 3, main_settings_rect);
-    UI graphics_settings_ui(-0.1, batcher.absolute_position_with_colored_vertex_shader_batcher.object_id_generator);
-
-    std::vector<std::string> options = {"800x600", "1024x1024"};
-    std::vector<std::function<void()>> option_on_clicks = {[]() {}, []() {}};
-    graphics_settings_ui.add_textbox("resolution", graphics_settings_grid.get_at(0, 0), colors.maroon);
-    graphics_settings_ui.add_dropdown(on_click_settings, on_hover, "1920x1080", graphics_settings_grid.get_at(2, 0),
-                                      colors.orange, colors.orangered, options, option_on_clicks);
-
-    std::vector<std::string> lighting_options = {"none", "early 2000s"};
-    std::vector<std::function<void()>> lighting_option_on_clicks = {[]() {}, []() {}};
-    graphics_settings_ui.add_textbox("lighting", graphics_settings_grid.get_at(0, 1), colors.maroon);
-    graphics_settings_ui.add_dropdown(on_click_settings, on_hover, "lighting", graphics_settings_grid.get_at(2, 1),
-                                      colors.orange, colors.orangered, lighting_options, lighting_option_on_clicks);
-
-    graphics_settings_ui.add_textbox("fov", graphics_settings_grid.get_at(0, 2), colors.maroon);
-    graphics_settings_ui.add_input_box(on_confirm, "enter fov", graphics_settings_grid.get_at(2, 2), colors.grey,
-                                       colors.lightgrey);
-
-    std::vector<std::string> yes_no_options = {"yes", "no"};
-    std::vector<std::function<void()>> viewmodel_options_on_click = {[]() {}, []() {}};
-    graphics_settings_ui.add_textbox("enable view model", graphics_settings_grid.get_at(0, 3), colors.maroon);
-    graphics_settings_ui.add_dropdown(on_click_settings, on_hover, "yes", graphics_settings_grid.get_at(2, 3),
-                                      colors.orange, colors.orangered, yes_no_options, viewmodel_options_on_click);
-
-    std::vector<std::function<void()>> fps_options_on_click = {[]() {}, []() {}};
-    graphics_settings_ui.add_textbox("show fps", graphics_settings_grid.get_at(0, 4), colors.maroon);
-    graphics_settings_ui.add_dropdown(on_click_settings, on_hover, "yes", graphics_settings_grid.get_at(2, 4),
-                                      colors.orange, colors.orangered, yes_no_options, fps_options_on_click);
-
-    vertex_geometry::Grid advanced_settings_grid(3, 3, main_settings_rect);
-    UI advanced_settings_ui(-0.1, batcher.absolute_position_with_colored_vertex_shader_batcher.object_id_generator);
-    advanced_settings_ui.add_textbox("display tick time expendature", advanced_settings_grid.get_at(0, 0),
-                                     colors.maroon);
-    advanced_settings_ui.add_textbox("display current ping", advanced_settings_grid.get_at(0, 1), colors.maroon);
-    advanced_settings_ui.add_textbox("display movement dial", advanced_settings_grid.get_at(0, 2), colors.maroon);
+    UI main_menu_ui = create_main_menu_ui(curr_state, window, batcher);
+    UI in_game_ui = create_in_game_ui(curr_state, batcher);
+    UI settings_menu_ui = create_settings_menu_ui(curr_state, batcher);
+    UI player_settings_ui = create_player_settings_ui(batcher);
+    UI input_settings_ui = create_input_settings_ui(batcher);
+    UI sound_settings_ui = create_sound_settings_ui(batcher);
+    UI graphics_settings_ui = create_graphics_settings_ui(curr_state, batcher);
+    UI advanced_settings_ui = create_advanced_settings_ui(batcher);
 
     std::map<StatePath, UI> game_state_to_ui = {
         {{TreeState::MAIN_MENU}, main_menu_ui},
@@ -383,6 +518,9 @@ int main() {
                 UI &ancestor_ui = game_state_to_ui.at(incremental_path);
 
                 // TODO: use input state thing and then actually fill this out with non mock data
+
+                process_key_pressed_this_tick(ancestor_ui); // because I yet use the InputState
+
                 process_and_queue_render_ui(ndc_mouse_pos, ancestor_ui, ui_render_suite, {}, false, false,
                                             mouse_just_clicked);
             }
