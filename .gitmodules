@@ -61,3 +61,12 @@
 [submodule "src/graphics/grid_font"]
 	path = src/graphics/grid_font
 	url = git@github.com:cpp-toolbox/grid_font.git
+[submodule "src/utility/config_file_parser"]
+	path = src/utility/config_file_parser
+	url = git@github.com:cpp-toolbox/config_file_parser.git
+[submodule "src/utility/fs_utils"]
+	path = src/utility/fs_utils
+	url = git@github.com:cpp-toolbox/fs_utils.git
+[submodule "src/utility/logger"]
+	path = src/utility/logger
+	url = git@github.com:cpp-toolbox/logger.git
