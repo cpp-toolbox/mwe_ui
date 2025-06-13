@@ -5,6 +5,8 @@ spdlog/1.14.1
 nlohmann_json/3.11.3
 stb/cci.20240531
 glm/1.0.1
+openal-soft/1.23.1
+libsndfile/1.2.2
 
 [generators]
 CMakeDeps

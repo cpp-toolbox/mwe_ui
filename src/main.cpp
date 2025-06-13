@@ -12,6 +12,8 @@
 #include "graphics/colors/colors.hpp"
 #include "graphics/vertex_geometry/vertex_geometry.hpp"
 
+#include "sound/sound_system/sound_system.hpp"
+#include "sound/sound_types/sound_types.hpp"
 #include "utility/state_tree/state_tree.hpp"
 #include "utility/tree_states/tree_states.hpp"
 #include "utility/config_file_parser/config_file_parser.hpp"
@@ -92,13 +94,38 @@ std::vector<VideoMode> get_available_video_modes(GLFWmonitor *monitor) {
     return modes_out;
 }
 
-std::vector<std::string> video_modes_to_resolutions(const std::vector<VideoMode> &video_modes) {
+// Helper function to parse aspect ratio string like "16:9"
+std::optional<std::pair<int, int>> parse_aspect_ratio(const std::string &aspect_ratio) {
+    std::istringstream ss(aspect_ratio);
+    int w, h;
+    char sep;
+    if (ss >> w >> sep >> h && sep == ':' && h != 0) {
+        return std::make_pair(w, h);
+    }
+    return std::nullopt;
+}
+
+std::vector<std::string> video_modes_to_resolutions(const std::vector<VideoMode> &video_modes,
+                                                    const std::optional<std::string> &aspect_ratio = std::nullopt) {
     std::vector<std::string> resolutions;
     std::unordered_set<std::string> seen;
 
+    std::optional<std::pair<int, int>> parsed_ratio;
+    if (aspect_ratio) {
+        parsed_ratio = parse_aspect_ratio(*aspect_ratio);
+    }
+
     for (const auto &mode : video_modes) {
+        // If filtering by aspect ratio
+        if (parsed_ratio) {
+            const auto &[target_w, target_h] = *parsed_ratio;
+            if (mode.width * target_h != mode.height * target_w) {
+                continue;
+            }
+        }
+
         std::string res = std::to_string(mode.width) + "x" + std::to_string(mode.height);
-        if (seen.insert(res).second) { // Insert if not already seen
+        if (seen.insert(res).second) {
             resolutions.push_back(res);
         }
     }
@@ -184,15 +211,17 @@ class UIRenderSuiteImpl : public IUIRenderSuite {
             dd.dropdown_background.rgb_colors, dd.modified_signal.has_just_changed());
     }
 
-    void render_dropdown_option(const UIDropdown &dd, const draw_info::IVPSolidColor &ivpsc,
-                                const draw_info::IVPSolidColor &text_ivpsc, unsigned int doid) override {
+    void render_dropdown_option(const UIDropdownOption &udo) override {
+
+        auto text_ivpsc = udo.text_ivpsc;
+        auto ivpsc = udo.background_ivpsc;
 
         batcher.absolute_position_with_colored_vertex_shader_batcher.queue_draw(
             text_ivpsc.id, text_ivpsc.indices, text_ivpsc.xyz_positions, text_ivpsc.rgb_colors,
-            dd.modified_signal.has_just_changed());
+            udo.modified_signal.has_just_changed());
 
         batcher.absolute_position_with_colored_vertex_shader_batcher.queue_draw(
-            ivpsc.id, ivpsc.indices, ivpsc.xyz_positions, ivpsc.rgb_colors, dd.modified_signal.has_just_changed());
+            ivpsc.id, ivpsc.indices, ivpsc.xyz_positions, ivpsc.rgb_colors, udo.modified_signal.has_just_changed());
     }
 };
 
@@ -201,28 +230,46 @@ class MenuSystem {
     vertex_geometry::Rectangle settings_menu_rect = vertex_geometry::Rectangle(glm::vec3(0, 0, 0), 1.2, 1.2);
     std::vector<vertex_geometry::Rectangle> settings_menu = weighted_subdivision(settings_menu_rect, {1, 3}, true);
 
+    SoundSystem &sound_system;
     Batcher &batcher;
     Configuration &configuration;
     GLFWwindow *window;
     std::vector<TreeState> &curr_state;
 
+    std::function<void()> on_hover = [&]() { sound_system.queue_sound(SoundType::UI_HOVER); };
+    std::function<void(const std::string)> dropdown_on_hover = [&](const std::string) {
+        sound_system.queue_sound(SoundType::UI_HOVER);
+    };
+
   public:
     UI main_menu_ui, in_game_ui, settings_menu_ui, player_settings_ui, input_settings_ui, sound_settings_ui,
         graphics_settings_ui, advanced_settings_ui;
-    MenuSystem(std::vector<TreeState> &curr_state, GLFWwindow *window, Batcher &batcher, Configuration &configuration)
-        : curr_state(curr_state), batcher(batcher), configuration(configuration), main_menu_ui(create_main_menu_ui()),
-          in_game_ui(create_in_game_ui()), settings_menu_ui(create_settings_menu_ui()),
-          player_settings_ui(create_player_settings_ui()), input_settings_ui(create_input_settings_ui()),
-          sound_settings_ui(create_sound_settings_ui()), graphics_settings_ui(create_graphics_settings_ui()),
-          advanced_settings_ui(create_advanced_settings_ui()) {};
+    MenuSystem(std::vector<TreeState> &curr_state, GLFWwindow *window, Batcher &batcher, SoundSystem &sound_system,
+               Configuration &configuration)
+        : curr_state(curr_state), batcher(batcher), sound_system(sound_system), configuration(configuration),
+          main_menu_ui(create_main_menu_ui()), in_game_ui(create_in_game_ui()),
+          settings_menu_ui(create_settings_menu_ui()), player_settings_ui(create_player_settings_ui()),
+          input_settings_ui(create_input_settings_ui()), sound_settings_ui(create_sound_settings_ui()),
+          graphics_settings_ui(create_graphics_settings_ui()), advanced_settings_ui(create_advanced_settings_ui()) {};
 
     UI create_main_menu_ui() {
 
-        std::function<void()> on_game_start = [&]() { curr_state = {TreeState::IN_GAME}; };
-        std::function<void()> on_click_settings = [&]() { curr_state = {TreeState::SETTINGS, TreeState::PLAYER}; };
-        std::function<void()> on_game_quit = [&]() { glfwSetWindowShouldClose(window, GLFW_TRUE); };
-        std::function<void()> on_back_clicked = [&]() { curr_state = {TreeState::MAIN_MENU}; };
-        std::function<void()> on_hover = [&]() {};
+        std::function<void()> on_game_start = [&]() {
+            sound_system.queue_sound(SoundType::UI_CLICK);
+            curr_state = {TreeState::IN_GAME};
+        };
+        std::function<void()> on_click_settings = [&]() {
+            sound_system.queue_sound(SoundType::UI_CLICK);
+            curr_state = {TreeState::SETTINGS, TreeState::PLAYER};
+        };
+        std::function<void()> on_game_quit = [&]() {
+            sound_system.queue_sound(SoundType::UI_CLICK);
+            glfwSetWindowShouldClose(window, GLFW_TRUE);
+        };
+        std::function<void()> on_back_clicked = [&]() {
+            sound_system.queue_sound(SoundType::UI_CLICK);
+            curr_state = {TreeState::MAIN_MENU};
+        };
 
         UIRenderSuiteImpl ui_render_suite(batcher);
 
@@ -252,7 +299,6 @@ class MenuSystem {
     UI create_in_game_ui() {
 
         std::function<void()> on_back_clicked = [&]() { curr_state = {TreeState::MAIN_MENU}; };
-        std::function<void()> on_hover = [&]() {};
 
         UI in_game_ui(0, batcher.absolute_position_with_colored_vertex_shader_batcher.object_id_generator);
         std::function<void(std::string)> on_confirm = [&](std::string contents) { std::cout << contents << std::endl; };
@@ -268,37 +314,59 @@ class MenuSystem {
 
         vertex_geometry::Grid top_row_grid(1, 5, settings_menu.at(0));
 
-        std::function<void()> on_back_clicked = [&]() { curr_state = {TreeState::MAIN_MENU}; };
-        std::function<void()> on_apply_clicked = [&]() { configuration.apply_config_logic(); };
-        std::function<void()> on_save_clicked = [&]() { configuration.save_to_file(); };
-        std::function<void()> on_hover = [&]() {};
-        std::function<void()> settings_on_click = []() {};
-        std::function<void()> settings_on_hover = []() {};
+        std::function<void()> on_back_clicked = [&]() {
+            sound_system.queue_sound(SoundType::UI_CLICK);
+            curr_state = {TreeState::MAIN_MENU};
+        };
+        std::function<void()> on_apply_clicked = [&]() {
+            sound_system.queue_sound(SoundType::UI_CLICK);
+            configuration.apply_config_logic();
+        };
+        std::function<void()> on_save_clicked = [&]() {
+            sound_system.queue_sound(SoundType::UI_CLICK);
+            configuration.save_to_file();
+        };
+        std::function<void()> settings_on_click = [&]() { sound_system.queue_sound(SoundType::UI_CLICK); };
 
-        std::function<void()> player_on_click = [&]() { curr_state = {TreeState::SETTINGS, TreeState::PLAYER}; };
+        std::function<void()> player_on_click = [&]() {
+            sound_system.queue_sound(SoundType::UI_CLICK);
+            curr_state = {TreeState::SETTINGS, TreeState::PLAYER};
+        };
         auto player_rect = top_row_grid.get_at(0, 0);
-        settings_menu_ui.add_clickable_textbox(player_on_click, settings_on_hover, "player", player_rect,
-                                               colors.darkblue, colors.blue);
+        settings_menu_ui.add_clickable_textbox(player_on_click, on_hover, "player", player_rect, colors.darkblue,
+                                               colors.blue);
 
-        std::function<void()> input_on_click = [&]() { curr_state = {TreeState::SETTINGS, TreeState::INPUT}; };
+        std::function<void()> input_on_click = [&]() {
+            sound_system.queue_sound(SoundType::UI_CLICK);
+            curr_state = {TreeState::SETTINGS, TreeState::INPUT};
+        };
         auto input_rect = top_row_grid.get_at(1, 0);
-        settings_menu_ui.add_clickable_textbox(input_on_click, settings_on_hover, "input", input_rect, colors.darkblue,
+        settings_menu_ui.add_clickable_textbox(input_on_click, on_hover, "input", input_rect, colors.darkblue,
                                                colors.blue);
 
-        std::function<void()> sound_on_click = [&]() { curr_state = {TreeState::SETTINGS, TreeState::SOUND}; };
+        std::function<void()> sound_on_click = [&]() {
+            sound_system.queue_sound(SoundType::UI_CLICK);
+            curr_state = {TreeState::SETTINGS, TreeState::SOUND};
+        };
         auto sound_rect = top_row_grid.get_at(2, 0);
-        settings_menu_ui.add_clickable_textbox(sound_on_click, settings_on_hover, "sound", sound_rect, colors.darkblue,
+        settings_menu_ui.add_clickable_textbox(sound_on_click, on_hover, "sound", sound_rect, colors.darkblue,
                                                colors.blue);
 
-        std::function<void()> graphics_on_click = [&]() { curr_state = {TreeState::SETTINGS, TreeState::GRAPHICS}; };
+        std::function<void()> graphics_on_click = [&]() {
+            sound_system.queue_sound(SoundType::UI_CLICK);
+            curr_state = {TreeState::SETTINGS, TreeState::GRAPHICS};
+        };
         auto graphics_rect = top_row_grid.get_at(3, 0);
-        settings_menu_ui.add_clickable_textbox(graphics_on_click, settings_on_hover, "graphics", graphics_rect,
-                                               colors.darkblue, colors.blue);
+        settings_menu_ui.add_clickable_textbox(graphics_on_click, on_hover, "graphics", graphics_rect, colors.darkblue,
+                                               colors.blue);
 
-        std::function<void()> network_on_click = [&]() { curr_state = {TreeState::SETTINGS, TreeState::ADVANCED}; };
+        std::function<void()> network_on_click = [&]() {
+            sound_system.queue_sound(SoundType::UI_CLICK);
+            curr_state = {TreeState::SETTINGS, TreeState::ADVANCED};
+        };
         auto network_rect = top_row_grid.get_at(4, 0);
-        settings_menu_ui.add_clickable_textbox(network_on_click, settings_on_hover, "network", network_rect,
-                                               colors.darkblue, colors.blue);
+        settings_menu_ui.add_clickable_textbox(network_on_click, on_hover, "network", network_rect, colors.darkblue,
+                                               colors.blue);
 
         vertex_geometry::Rectangle main_settings_rect = settings_menu.at(1);
         settings_menu_ui.add_colored_rectangle(main_settings_rect, colors.grey);
@@ -379,10 +447,9 @@ class MenuSystem {
 
         GLFWmonitor *monitor = glfwGetPrimaryMonitor();
         auto video_modes = get_available_video_modes(monitor);
-        std::vector<std::string> resolutions = video_modes_to_resolutions(video_modes);
+        std::vector<std::string> resolutions = video_modes_to_resolutions(video_modes, "16:9");
 
         std::function<void(std::string)> on_confirm = [&](std::string contents) { std::cout << contents << std::endl; };
-        std::function<void()> on_hover = [&]() {};
 
         vertex_geometry::Rectangle main_settings_rect = settings_menu.at(1);
         vertex_geometry::Grid main_settings_grid(7, 3, main_settings_rect);
@@ -400,6 +467,7 @@ class MenuSystem {
         std::function<void(std::string)> empty_on_click = [](std::string option) { std::cout << option << std::endl; };
 
         std::function<void(std::string)> resolution_dropdown_on_click = [this](std::string option) {
+            sound_system.queue_sound(SoundType::UI_CLICK);
             size_t x_pos = option.find('x');
             unsigned int width, height;
             if (x_pos != std::string::npos) {
@@ -415,21 +483,25 @@ class MenuSystem {
 
         graphics_settings_ui.add_textbox("resolution", graphics_settings_grid.get_at(0, 0), colors.maroon);
         graphics_settings_ui.add_dropdown(on_click_settings, on_hover, graphics_settings_grid.get_at(2, 0),
-                                          colors.orange, colors.orangered, options, resolution_dropdown_on_click);
+                                          colors.orange, colors.orangered, options, resolution_dropdown_on_click,
+                                          dropdown_on_hover);
 
         std::function<void(std::string)> fullscreen_on_click = [this](std::string option) {
+            sound_system.queue_sound(SoundType::UI_CLICK);
             configuration.set_value("graphics", "fullscreen", option);
         };
 
         graphics_settings_ui.add_textbox("fullscreen", graphics_settings_grid.get_at(0, 1), colors.maroon);
         graphics_settings_ui.add_dropdown(on_click_settings, on_hover, graphics_settings_grid.get_at(2, 1),
-                                          colors.orange, colors.orangered, yes_no_options, fullscreen_on_click);
+                                          colors.orange, colors.orangered, yes_no_options, fullscreen_on_click,
+                                          dropdown_on_hover);
 
         std::vector<std::string> lighting_options = {"none", "early 2000s"};
         std::vector<std::function<void()>> lighting_option_on_clicks = {[]() {}, []() {}};
         graphics_settings_ui.add_textbox("lighting", graphics_settings_grid.get_at(0, 2), colors.maroon);
         graphics_settings_ui.add_dropdown(on_click_settings, on_hover, graphics_settings_grid.get_at(2, 2),
-                                          colors.orange, colors.orangered, lighting_options, empty_on_click);
+                                          colors.orange, colors.orangered, lighting_options, empty_on_click,
+                                          dropdown_on_hover);
 
         graphics_settings_ui.add_textbox("fov", graphics_settings_grid.get_at(0, 3), colors.maroon);
         graphics_settings_ui.add_input_box(on_confirm, "enter fov", graphics_settings_grid.get_at(2, 3), colors.grey,
@@ -438,12 +510,14 @@ class MenuSystem {
         std::vector<std::function<void()>> viewmodel_options_on_click = {[]() {}, []() {}};
         graphics_settings_ui.add_textbox("enable view model", graphics_settings_grid.get_at(0, 4), colors.maroon);
         graphics_settings_ui.add_dropdown(on_click_settings, on_hover, graphics_settings_grid.get_at(2, 4),
-                                          colors.orange, colors.orangered, yes_no_options, empty_on_click);
+                                          colors.orange, colors.orangered, yes_no_options, empty_on_click,
+                                          dropdown_on_hover);
 
         std::vector<std::function<void()>> fps_options_on_click = {[]() {}, []() {}};
         graphics_settings_ui.add_textbox("show fps", graphics_settings_grid.get_at(0, 5), colors.maroon);
         graphics_settings_ui.add_dropdown(on_click_settings, on_hover, graphics_settings_grid.get_at(2, 5),
-                                          colors.orange, colors.orangered, yes_no_options, empty_on_click);
+                                          colors.orange, colors.orangered, yes_no_options, empty_on_click,
+                                          dropdown_on_hover);
 
         return graphics_settings_ui;
     }
@@ -469,6 +543,14 @@ int main() {
     // TODO I don't think I even need to use tree states here, just regular states and do the ui map approach
     // defined later down
     std::vector<TreeState> curr_state = {TreeState::MAIN_MENU};
+
+    std::unordered_map<SoundType, std::string> sound_type_to_file = {
+        {SoundType::UI_HOVER, "assets/sounds/hover.wav"},
+        {SoundType::UI_CLICK, "assets/sounds/click.wav"},
+        {SoundType::UI_SUCCESS, "assets/sounds/success.wav"},
+    };
+
+    SoundSystem sound_system(100, sound_type_to_file);
 
     Window window;
 
@@ -534,11 +616,9 @@ int main() {
     std::function<void()> on_game_quit = [&]() { glfwSetWindowShouldClose(window.glfw_window, GLFW_TRUE); };
     std::function<void()> on_back_clicked = [&]() { curr_state = {TreeState::MAIN_MENU}; };
 
-    std::function<void()> on_hover = [&]() {};
-
     UIRenderSuiteImpl ui_render_suite(batcher);
 
-    MenuSystem menu_system(curr_state, window.glfw_window, batcher, configuration);
+    MenuSystem menu_system(curr_state, window.glfw_window, batcher, sound_system, configuration);
 
     std::map<StatePath, UI> game_state_to_ui = {
         {{TreeState::MAIN_MENU}, menu_system.main_menu_ui},
@@ -583,6 +663,8 @@ int main() {
         }
 
         batcher.absolute_position_with_colored_vertex_shader_batcher.draw_everything();
+
+        sound_system.play_all_sounds();
 
         mouse_just_clicked = false;
 
