@@ -269,7 +269,8 @@ class MenuSystem {
         vertex_geometry::Grid top_row_grid(1, 5, settings_menu.at(0));
 
         std::function<void()> on_back_clicked = [&]() { curr_state = {TreeState::MAIN_MENU}; };
-        std::function<void()> on_apply_clicked = [&]() { configuration.save_to_file(); };
+        std::function<void()> on_apply_clicked = [&]() { configuration.apply_config_logic(); };
+        std::function<void()> on_save_clicked = [&]() { configuration.save_to_file(); };
         std::function<void()> on_hover = [&]() {};
         std::function<void()> settings_on_click = []() {};
         std::function<void()> settings_on_hover = []() {};
@@ -310,6 +311,11 @@ class MenuSystem {
         vertex_geometry::Rectangle apply_rect = vertex_geometry::create_rectangle_from_corners(
             glm::vec3(1, -0.75, 0), glm::vec3(0.75, -0.75, 0), glm::vec3(1, -1, 0), glm::vec3(0.75, -1, 0));
         settings_menu_ui.add_clickable_textbox(on_apply_clicked, on_hover, "APPLY", apply_rect, colors.darkgreen,
+                                               colors.green);
+
+        vertex_geometry::Rectangle save_rect = vertex_geometry::slide_rectangle(apply_rect, -1, 0);
+
+        settings_menu_ui.add_clickable_textbox(on_save_clicked, on_hover, "SAVE", save_rect, colors.darkgreen,
                                                colors.green);
 
         vertex_geometry::Grid main_settings_grid(7, 3, main_settings_rect);
@@ -383,7 +389,7 @@ class MenuSystem {
 
         std::function<void()> on_click_settings = [&]() { curr_state = {TreeState::SETTINGS, TreeState::PLAYER}; };
 
-        std::vector<std::string> yes_no_options = {"yes", "no"};
+        std::vector<std::string> yes_no_options = {"on", "off"};
 
         vertex_geometry::Grid graphics_settings_grid(10, 3, main_settings_rect);
         UI graphics_settings_ui(-0.1, batcher.absolute_position_with_colored_vertex_shader_batcher.object_id_generator);
@@ -411,9 +417,13 @@ class MenuSystem {
         graphics_settings_ui.add_dropdown(on_click_settings, on_hover, graphics_settings_grid.get_at(2, 0),
                                           colors.orange, colors.orangered, options, resolution_dropdown_on_click);
 
+        std::function<void(std::string)> fullscreen_on_click = [this](std::string option) {
+            configuration.set_value("graphics", "fullscreen", option);
+        };
+
         graphics_settings_ui.add_textbox("fullscreen", graphics_settings_grid.get_at(0, 1), colors.maroon);
         graphics_settings_ui.add_dropdown(on_click_settings, on_hover, graphics_settings_grid.get_at(2, 1),
-                                          colors.orange, colors.orangered, yes_no_options, empty_on_click);
+                                          colors.orange, colors.orangered, yes_no_options, fullscreen_on_click);
 
         std::vector<std::string> lighting_options = {"none", "early 2000s"};
         std::vector<std::function<void()>> lighting_option_on_clicks = {[]() {}, []() {}};
@@ -456,27 +466,55 @@ class MenuSystem {
 
 int main() {
 
-    // using this to save our configuration for the future.
-    Configuration configuration("assets/config/user_cfg.ini");
-
-    // TODO I don't think I even need to use tree states here, just regular states and do the ui map approach defined
-    // later down
+    // TODO I don't think I even need to use tree states here, just regular states and do the ui map approach
+    // defined later down
     std::vector<TreeState> curr_state = {TreeState::MAIN_MENU};
 
     Window window;
+
+    // using this to save our configuration for the future.
+    Configuration configuration("assets/config/user_cfg.ini");
+
+    configuration.register_config_handler("graphics", "resolution", [&](const std::string resolution) {
+        size_t x_pos = resolution.find('x');
+        unsigned int width, height;
+        if (x_pos != std::string::npos) {
+            width = std::stoi(resolution.substr(0, x_pos));
+            height = std::stoi(resolution.substr(x_pos + 1));
+            glfwSetWindowSize(window.glfw_window, width, height);
+            // the above verifies that indeed the things are numbers which means its valid I think... probably not
+            // needed since the options are already
+            // configuration.set_value("graphics", "resolution", option);
+        } else {
+            throw std::invalid_argument("Input string is not in the correct format (e.g. 1280x960)");
+        }
+    });
+
+    configuration.register_config_handler("graphics", "fullscreen", [&](const std::string value) {
+        // TODO: if value is on / off we call window.enable/disable_fullscreen accordingly.
+
+        configuration.register_config_handler("graphics", "fullscreen", [&](const std::string &value) {
+            if (value == "on") {
+                window.enable_fullscreen();
+            } else if (value == "off") {
+                window.disable_fullscreen();
+            } else {
+                std::cout << "Invalid value for fullscreen: {}" << value << std::endl;
+            }
+        });
+    });
+
+    configuration.apply_config_logic();
 
     bool start_in_fullscreen = false;
     glfwSetMouseButtonCallback(window.glfw_window, mouse_button_callback);
     glfwSetKeyCallback(window.glfw_window, key_callback);
     glfwSetCursorPosCallback(window.glfw_window, cursor_position_callback);
 
-    std::vector<ShaderType> requested_shaders = {ShaderType::ABSOLUTE_POSITION_WITH_COLORED_VERTEX,
-                                                 ShaderType::ABSOLUTE_POSITION_WITH_SIGNED_DISTANCE_FIELD_TEXT};
+    std::vector<ShaderType> requested_shaders = {ShaderType::ABSOLUTE_POSITION_WITH_COLORED_VERTEX};
 
     ShaderCache shader_cache(requested_shaders);
     Batcher batcher(shader_cache);
-    FontAtlas font_atlas("assets/times_64_sdf_atlas_font_info.json", "assets/times_64_sdf_atlas.json",
-                         "assets/times_64_sdf_atlas.png", SCREEN_WIDTH, false, true);
 
     glm::mat4 projection = glm::mat4(1);
     auto text_color = glm::vec3(0.5, 0.5, 1);
@@ -490,18 +528,6 @@ int main() {
 
     shader_cache.set_uniform(ShaderType::ABSOLUTE_POSITION_WITH_COLORED_VERTEX, ShaderUniformVariable::ASPECT_RATIO,
                              glm::vec2(1, 1));
-
-    shader_cache.set_uniform(ShaderType::ABSOLUTE_POSITION_WITH_SIGNED_DISTANCE_FIELD_TEXT,
-                             ShaderUniformVariable::ASPECT_RATIO, glm::vec2(1, 1));
-
-    shader_cache.set_uniform(ShaderType::ABSOLUTE_POSITION_WITH_SIGNED_DISTANCE_FIELD_TEXT,
-                             ShaderUniformVariable::RGB_COLOR, text_color);
-
-    shader_cache.set_uniform(ShaderType::ABSOLUTE_POSITION_WITH_SIGNED_DISTANCE_FIELD_TEXT,
-                             ShaderUniformVariable::CHARACTER_WIDTH, char_width);
-
-    shader_cache.set_uniform(ShaderType::ABSOLUTE_POSITION_WITH_SIGNED_DISTANCE_FIELD_TEXT,
-                             ShaderUniformVariable::EDGE_TRANSITION_WIDTH, edge_transition);
 
     std::function<void()> on_game_start = [&]() { curr_state = {TreeState::IN_GAME}; };
     std::function<void()> on_click_settings = [&]() { curr_state = {TreeState::SETTINGS, TreeState::PLAYER}; };
@@ -557,7 +583,6 @@ int main() {
         }
 
         batcher.absolute_position_with_colored_vertex_shader_batcher.draw_everything();
-        batcher.absolute_position_with_signed_distance_field_text_shader_batcher.draw_everything();
 
         mouse_just_clicked = false;
 

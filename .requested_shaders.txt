@@ -1,2 +1,1 @@
 absolute_position_with_colored_vertex
-absolute_position_with_signed_distance_field_text 
