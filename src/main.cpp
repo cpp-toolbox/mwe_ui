@@ -555,7 +555,7 @@ int main() {
     Window window;
 
     // using this to save our configuration for the future.
-    Configuration configuration("assets/config/user_cfg.ini");
+    Configuration configuration("assets/config/user_cfg.ini", {}, false);
 
     configuration.register_config_handler("graphics", "resolution", [&](const std::string resolution) {
         size_t x_pos = resolution.find('x');
@@ -563,7 +563,10 @@ int main() {
         if (x_pos != std::string::npos) {
             width = std::stoi(resolution.substr(0, x_pos));
             height = std::stoi(resolution.substr(x_pos + 1));
+            window.width_px = width;
+            window.width_px = height;
             glfwSetWindowSize(window.glfw_window, width, height);
+            std::cout << "just tried setting resolution to: " << resolution << std::endl;
             // the above verifies that indeed the things are numbers which means its valid I think... probably not
             // needed since the options are already
             // configuration.set_value("graphics", "resolution", option);
@@ -575,15 +578,13 @@ int main() {
     configuration.register_config_handler("graphics", "fullscreen", [&](const std::string value) {
         // TODO: if value is on / off we call window.enable/disable_fullscreen accordingly.
 
-        configuration.register_config_handler("graphics", "fullscreen", [&](const std::string &value) {
-            if (value == "on") {
-                window.enable_fullscreen();
-            } else if (value == "off") {
-                window.disable_fullscreen();
-            } else {
-                std::cout << "Invalid value for fullscreen: {}" << value << std::endl;
-            }
-        });
+        if (value == "on") {
+            window.enable_fullscreen();
+        } else if (value == "off") {
+            window.disable_fullscreen();
+        } else {
+            std::cout << "Invalid value for fullscreen: {}" << value << std::endl;
+        }
     });
 
     configuration.apply_config_logic();
@@ -631,13 +632,16 @@ int main() {
         {{TreeState::SETTINGS, TreeState::ADVANCED}, menu_system.advanced_settings_ui},
     };
 
-    int width, height;
+    // TODO: was debugging this I believe instead we have to use the window.width stuff here instead
+
+    // int width, height;
 
     while (!glfwWindowShouldClose(window.glfw_window)) {
 
-        glfwGetFramebufferSize(window.glfw_window, &width, &height);
+        // glfwGetFramebufferSize(window.glfw_window, &width, &height);
 
-        glViewport(0, 0, width, height);
+        // I think this is still bad doing this everyframe, instead just do it through the size change callback
+        // glViewport(0, 0, window.width_px, window.height_px);
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
