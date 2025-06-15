@@ -3,6 +3,7 @@
 #include <future>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
+
 #include "graphics/font_atlas/font_atlas.hpp"
 #include "graphics/shader_standard/shader_standard.hpp"
 #include "graphics/ui/ui.hpp"
@@ -14,9 +15,12 @@
 
 #include "sound/sound_system/sound_system.hpp"
 #include "sound/sound_types/sound_types.hpp"
+
 #include "utility/state_tree/state_tree.hpp"
 #include "utility/tree_states/tree_states.hpp"
 #include "utility/config_file_parser/config_file_parser.hpp"
+
+#include "input/glfw_lambda_callback_manager/glfw_lambda_callback_manager.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -54,11 +58,7 @@ void process_key_pressed_this_tick(UI &ui) {
     }
 }
 
-void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods) {
-    if (action == GLFW_PRESS) {
-        key_pressed_this_tick = key; // Store the key pressed this tick
-    }
-}
+void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods) {}
 
 unsigned int SCREEN_WIDTH = 640;
 unsigned int SCREEN_HEIGHT = 480;
@@ -443,6 +443,11 @@ class MenuSystem {
         return sound_settings_ui;
     }
 
+    int get_index_or_default(const std::string &value, const std::vector<std::string> &vec) {
+        auto it = std::find(vec.begin(), vec.end(), value);
+        return (it != vec.end()) ? std::distance(vec.begin(), it) : 0;
+    }
+
     UI create_graphics_settings_ui() {
 
         GLFWmonitor *monitor = glfwGetPrimaryMonitor();
@@ -481,27 +486,32 @@ class MenuSystem {
             }
         };
 
+        int dropdown_option_idx;
+
+        dropdown_option_idx = get_index_or_default(configuration.get_value("graphics", "resolution").value(), options);
         graphics_settings_ui.add_textbox("resolution", graphics_settings_grid.get_at(0, 0), colors.maroon);
-        graphics_settings_ui.add_dropdown(on_click_settings, on_hover, graphics_settings_grid.get_at(2, 0),
-                                          colors.orange, colors.orangered, options, resolution_dropdown_on_click,
-                                          dropdown_on_hover);
+        graphics_settings_ui.add_dropdown(on_click_settings, on_hover, dropdown_option_idx,
+                                          graphics_settings_grid.get_at(2, 0), colors.orange, colors.orangered, options,
+                                          resolution_dropdown_on_click, dropdown_on_hover);
 
         std::function<void(std::string)> fullscreen_on_click = [this](std::string option) {
             sound_system.queue_sound(SoundType::UI_CLICK);
             configuration.set_value("graphics", "fullscreen", option);
         };
 
+        dropdown_option_idx =
+            get_index_or_default(configuration.get_value("graphics", "fullscreen").value(), yes_no_options);
         graphics_settings_ui.add_textbox("fullscreen", graphics_settings_grid.get_at(0, 1), colors.maroon);
-        graphics_settings_ui.add_dropdown(on_click_settings, on_hover, graphics_settings_grid.get_at(2, 1),
-                                          colors.orange, colors.orangered, yes_no_options, fullscreen_on_click,
-                                          dropdown_on_hover);
+        graphics_settings_ui.add_dropdown(on_click_settings, on_hover, dropdown_option_idx,
+                                          graphics_settings_grid.get_at(2, 1), colors.orange, colors.orangered,
+                                          yes_no_options, fullscreen_on_click, dropdown_on_hover);
 
         std::vector<std::string> lighting_options = {"none", "early 2000s"};
         std::vector<std::function<void()>> lighting_option_on_clicks = {[]() {}, []() {}};
         graphics_settings_ui.add_textbox("lighting", graphics_settings_grid.get_at(0, 2), colors.maroon);
-        graphics_settings_ui.add_dropdown(on_click_settings, on_hover, graphics_settings_grid.get_at(2, 2),
-                                          colors.orange, colors.orangered, lighting_options, empty_on_click,
-                                          dropdown_on_hover);
+        graphics_settings_ui.add_dropdown(on_click_settings, on_hover, dropdown_option_idx,
+                                          graphics_settings_grid.get_at(2, 2), colors.orange, colors.orangered,
+                                          lighting_options, empty_on_click, dropdown_on_hover);
 
         graphics_settings_ui.add_textbox("fov", graphics_settings_grid.get_at(0, 3), colors.maroon);
         graphics_settings_ui.add_input_box(on_confirm, "enter fov", graphics_settings_grid.get_at(2, 3), colors.grey,
@@ -509,15 +519,15 @@ class MenuSystem {
 
         std::vector<std::function<void()>> viewmodel_options_on_click = {[]() {}, []() {}};
         graphics_settings_ui.add_textbox("enable view model", graphics_settings_grid.get_at(0, 4), colors.maroon);
-        graphics_settings_ui.add_dropdown(on_click_settings, on_hover, graphics_settings_grid.get_at(2, 4),
-                                          colors.orange, colors.orangered, yes_no_options, empty_on_click,
-                                          dropdown_on_hover);
+        graphics_settings_ui.add_dropdown(on_click_settings, on_hover, dropdown_option_idx,
+                                          graphics_settings_grid.get_at(2, 4), colors.orange, colors.orangered,
+                                          yes_no_options, empty_on_click, dropdown_on_hover);
 
         std::vector<std::function<void()>> fps_options_on_click = {[]() {}, []() {}};
         graphics_settings_ui.add_textbox("show fps", graphics_settings_grid.get_at(0, 5), colors.maroon);
-        graphics_settings_ui.add_dropdown(on_click_settings, on_hover, graphics_settings_grid.get_at(2, 5),
-                                          colors.orange, colors.orangered, yes_no_options, empty_on_click,
-                                          dropdown_on_hover);
+        graphics_settings_ui.add_dropdown(on_click_settings, on_hover, dropdown_option_idx,
+                                          graphics_settings_grid.get_at(2, 5), colors.orange, colors.orangered,
+                                          yes_no_options, empty_on_click, dropdown_on_hover);
 
         return graphics_settings_ui;
     }
@@ -554,6 +564,32 @@ int main() {
 
     Window window;
 
+    std::function<void(unsigned int)> char_callback = [](unsigned int codepoint) {};
+    std::function<void(int, int, int, int)> key_callback = [](int key, int scancode, int action, int mods) {
+        if (action == GLFW_PRESS) {
+            key_pressed_this_tick = key; // Store the key pressed this tick
+        }
+    };
+    std::function<void(double, double)> mouse_pos_callback = [](double xpos, double ypos) {
+        mouse_position_x = xpos;
+        mouse_position_y = ypos;
+    };
+    std::function<void(int, int, int)> mouse_button_callback = [](int button, int action, int mods) {
+        if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+            mouse_just_clicked = true;
+        }
+    };
+    std::function<void(int, int)> frame_buffer_size_callback = [&](int width, int height) {
+        // this gets called whenever the window changes size, because the framebuffer automatically
+        // changes size, that is all done in glfw's context, then we need to update opengl's size.
+        std::cout << "framebuffersize callback called, width" << width << "height: " << height << std::endl;
+        glViewport(0, 0, width, height);
+        window.width_px = width;
+        window.height_px = height;
+    };
+    GLFWLambdaCallbackManager glcm(window.glfw_window, char_callback, key_callback, mouse_pos_callback,
+                                   mouse_button_callback, frame_buffer_size_callback);
+
     // using this to save our configuration for the future.
     Configuration configuration("assets/config/user_cfg.ini", {}, false);
 
@@ -564,12 +600,8 @@ int main() {
             width = std::stoi(resolution.substr(0, x_pos));
             height = std::stoi(resolution.substr(x_pos + 1));
             window.width_px = width;
-            window.width_px = height;
+            window.height_px = height;
             glfwSetWindowSize(window.glfw_window, width, height);
-            std::cout << "just tried setting resolution to: " << resolution << std::endl;
-            // the above verifies that indeed the things are numbers which means its valid I think... probably not
-            // needed since the options are already
-            // configuration.set_value("graphics", "resolution", option);
         } else {
             throw std::invalid_argument("Input string is not in the correct format (e.g. 1280x960)");
         }
@@ -590,9 +622,6 @@ int main() {
     configuration.apply_config_logic();
 
     bool start_in_fullscreen = false;
-    glfwSetMouseButtonCallback(window.glfw_window, mouse_button_callback);
-    glfwSetKeyCallback(window.glfw_window, key_callback);
-    glfwSetCursorPosCallback(window.glfw_window, cursor_position_callback);
 
     std::vector<ShaderType> requested_shaders = {ShaderType::ABSOLUTE_POSITION_WITH_COLORED_VERTEX};
 
@@ -634,14 +663,7 @@ int main() {
 
     // TODO: was debugging this I believe instead we have to use the window.width stuff here instead
 
-    // int width, height;
-
     while (!glfwWindowShouldClose(window.glfw_window)) {
-
-        // glfwGetFramebufferSize(window.glfw_window, &width, &height);
-
-        // I think this is still bad doing this everyframe, instead just do it through the size change callback
-        // glViewport(0, 0, window.width_px, window.height_px);
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
