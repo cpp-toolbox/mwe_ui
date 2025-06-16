@@ -419,15 +419,47 @@ class MenuSystem {
         vertex_geometry::Grid input_settings_grid(10, 3, main_settings_rect);
         UI input_settings_ui(-0.1, batcher.absolute_position_with_colored_vertex_shader_batcher.object_id_generator);
         input_settings_ui.add_textbox("mouse sensitivity", input_settings_grid.get_at(0, 0), colors.maroon);
+
+        std::function<void(std::string)> on_confirm = [&](std::string contents) { std::cout << contents << std::endl; };
+
+        input_settings_ui.add_input_box(on_confirm, "1", input_settings_grid.get_at(2, 0), colors.grey,
+                                        colors.lightgrey);
+
         input_settings_ui.add_textbox("fire", input_settings_grid.get_at(0, 1), colors.maroon);
+        input_settings_ui.add_input_box(on_confirm, "lmb", input_settings_grid.get_at(2, 1), colors.grey,
+                                        colors.lightgrey);
+
         input_settings_ui.add_textbox("jump", input_settings_grid.get_at(0, 2), colors.maroon);
+        input_settings_ui.add_input_box(on_confirm, "space", input_settings_grid.get_at(2, 2), colors.grey,
+                                        colors.lightgrey);
+
         input_settings_ui.add_textbox("move forward", input_settings_grid.get_at(0, 3), colors.maroon);
+        input_settings_ui.add_input_box(on_confirm, "w", input_settings_grid.get_at(2, 3), colors.grey,
+                                        colors.lightgrey);
+
         input_settings_ui.add_textbox("move backward", input_settings_grid.get_at(0, 4), colors.maroon);
+        input_settings_ui.add_input_box(on_confirm, "s", input_settings_grid.get_at(2, 4), colors.grey,
+                                        colors.lightgrey);
+
         input_settings_ui.add_textbox("move left", input_settings_grid.get_at(0, 5), colors.maroon);
+        input_settings_ui.add_input_box(on_confirm, "a", input_settings_grid.get_at(2, 5), colors.grey,
+                                        colors.lightgrey);
+
         input_settings_ui.add_textbox("move right", input_settings_grid.get_at(0, 6), colors.maroon);
+        input_settings_ui.add_input_box(on_confirm, "d", input_settings_grid.get_at(2, 6), colors.grey,
+                                        colors.lightgrey);
+
         input_settings_ui.add_textbox("select weapon 1", input_settings_grid.get_at(0, 7), colors.maroon);
+        input_settings_ui.add_input_box(on_confirm, "1", input_settings_grid.get_at(2, 7), colors.grey,
+                                        colors.lightgrey);
+
         input_settings_ui.add_textbox("select weapon 2", input_settings_grid.get_at(0, 8), colors.maroon);
+        input_settings_ui.add_input_box(on_confirm, "2", input_settings_grid.get_at(2, 8), colors.grey,
+                                        colors.lightgrey);
+
         input_settings_ui.add_textbox("select weapon 3", input_settings_grid.get_at(0, 9), colors.maroon);
+        input_settings_ui.add_input_box(on_confirm, "3", input_settings_grid.get_at(2, 9), colors.grey,
+                                        colors.lightgrey);
 
         return input_settings_ui;
     }
