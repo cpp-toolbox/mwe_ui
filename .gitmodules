@@ -82,3 +82,6 @@
 [submodule "src/input/input_state"]
 	path = src/input/input_state
 	url = git@github.com:cpp-toolbox/input_state.git
+[submodule "src/graphics/input_graphics_sound_menu"]
+	path = src/graphics/input_graphics_sound_menu
+	url = git@github.com:cpp-toolbox/input_graphics_sound_menu.git
