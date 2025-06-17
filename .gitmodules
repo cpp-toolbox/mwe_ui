@@ -76,3 +76,9 @@
 [submodule "src/graphics/ui_render_suite_implementation"]
 	path = src/graphics/ui_render_suite_implementation
 	url = git@github.com:cpp-toolbox/ui_render_suite_implementation.git
+[submodule "src/utility/text_utils"]
+	path = src/utility/text_utils
+	url = git@github.com:cpp-toolbox/text_utils.git
+[submodule "src/input/input_state"]
+	path = src/input/input_state
+	url = git@github.com:cpp-toolbox/input_state.git

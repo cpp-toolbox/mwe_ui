@@ -21,7 +21,7 @@ enum class UIState {
     GRAPHICS_SETTINGS,
     ADVANCED_SETTINGS,
 
-    CREDITS,
+    ABOUT,
     IN_GAME,
 };
 
@@ -43,12 +43,13 @@ class InputGraphicsSoundMenu {
   public:
     UIState curr_state = UIState::MAIN_MENU;
 
-    UI main_menu_ui, in_game_ui, settings_menu_ui, player_settings_ui, input_settings_ui, sound_settings_ui,
+    UI main_menu_ui, in_game_ui, about_ui, settings_menu_ui, player_settings_ui, input_settings_ui, sound_settings_ui,
         graphics_settings_ui, advanced_settings_ui;
 
     std::map<UIState, UI &> game_state_to_ui = {
         {UIState::MAIN_MENU, main_menu_ui},
         {UIState::IN_GAME, in_game_ui},
+        {UIState::ABOUT, about_ui},
         {UIState::SETTINGS_MENU, settings_menu_ui},
         {UIState::PLAYER_SETTINGS, player_settings_ui},
         {UIState::INPUT_SETTINGS, input_settings_ui},
@@ -59,7 +60,7 @@ class InputGraphicsSoundMenu {
 
     InputGraphicsSoundMenu(Window &window, Batcher &batcher, SoundSystem &sound_system, Configuration &configuration)
         : window(window), batcher(batcher), sound_system(sound_system), configuration(configuration),
-          main_menu_ui(create_main_menu_ui()), in_game_ui(create_in_game_ui()),
+          main_menu_ui(create_main_menu_ui()), in_game_ui(create_in_game_ui()), about_ui(create_about_ui()),
           settings_menu_ui(create_settings_menu_ui()), player_settings_ui(create_player_settings_ui()),
           input_settings_ui(create_input_settings_ui()), sound_settings_ui(create_sound_settings_ui()),
           graphics_settings_ui(create_graphics_settings_ui()), advanced_settings_ui(create_advanced_settings_ui()) {
@@ -89,7 +90,7 @@ class InputGraphicsSoundMenu {
             return {UIState::SETTINGS_MENU};
         case UIState::ADVANCED_SETTINGS:
             return {UIState::SETTINGS_MENU};
-        case UIState::CREDITS:
+        case UIState::ABOUT:
             return {};
         case UIState::IN_GAME:
             return {};
@@ -99,7 +100,39 @@ class InputGraphicsSoundMenu {
         return {};
     }
 
-    void render_ui() {}
+    glm::vec2 get_ndc_mouse_pos(GLFWwindow *window, double xpos, double ypos) {
+        int width, height;
+        glfwGetWindowSize(window, &width, &height);
+
+        return {(2.0f * xpos) / width - 1.0f, 1.0f - (2.0f * ypos) / height};
+    }
+
+    glm::vec2 aspect_corrected_ndc_mouse_pos(const glm::vec2 &ndc_mouse_pos, float x_scale) {
+        return {ndc_mouse_pos.x * x_scale, ndc_mouse_pos.y};
+    }
+
+    void process_and_queue_render_menu(Window &window, InputState &input_state, IUIRenderSuite &ui_render_suite) {
+
+        auto ndc_mouse_pos =
+            get_ndc_mouse_pos(window.glfw_window, input_state.mouse_position_x, input_state.mouse_position_y);
+        auto acnmp = aspect_corrected_ndc_mouse_pos(ndc_mouse_pos, window.width_px / (float)window.height_px);
+
+        std::vector<UIState> uis_to_render = {curr_state};
+        for (const auto &ui_state : get_ui_dependencies(curr_state)) {
+            uis_to_render.push_back(ui_state);
+        }
+
+        for (const auto &ui_state : uis_to_render) {
+            if (game_state_to_ui.find(ui_state) != game_state_to_ui.end()) {
+                UI &selected_ui = game_state_to_ui.at(ui_state);
+
+                process_and_queue_render_ui(
+                    acnmp, selected_ui, ui_render_suite, input_state.get_keys_just_pressed_this_tick(),
+                    input_state.is_just_pressed(EKey::BACKSPACE), input_state.is_just_pressed(EKey::ENTER),
+                    input_state.is_just_pressed(EKey::LEFT_MOUSE_BUTTON));
+            }
+        }
+    }
 
     UI create_main_menu_ui() {
 
@@ -110,6 +143,10 @@ class InputGraphicsSoundMenu {
         std::function<void()> on_click_settings = [&]() {
             sound_system.queue_sound(SoundType::UI_CLICK);
             curr_state = UIState::PLAYER_SETTINGS;
+        };
+        std::function<void()> on_click_about = [&]() {
+            sound_system.queue_sound(SoundType::UI_CLICK);
+            curr_state = UIState::ABOUT;
         };
         std::function<void()> on_game_quit = [&]() {
             sound_system.queue_sound(SoundType::UI_CLICK);
@@ -136,13 +173,33 @@ class InputGraphicsSoundMenu {
                                            colors::blue);
 
         auto credits_rect = grid.get_at(0, 2);
-        main_menu_ui.add_clickable_textbox(on_game_quit, on_hover, "CREDITS", credits_rect, colors::darkblue,
+        main_menu_ui.add_clickable_textbox(on_click_about, on_hover, "ABOUT", credits_rect, colors::darkblue,
                                            colors::blue);
 
         auto exit_rect = grid.get_at(0, 3);
         main_menu_ui.add_clickable_textbox(on_game_quit, on_hover, "QUIT", exit_rect, colors::darkred, colors::red);
 
         return main_menu_ui;
+    }
+
+    UI create_about_ui() {
+        std::function<void()> on_back_clicked = [&]() { curr_state = {UIState::MAIN_MENU}; };
+
+        UI about_ui(0, batcher.absolute_position_with_colored_vertex_shader_batcher.object_id_generator);
+        std::function<void(std::string)> on_confirm = [&](std::string contents) { std::cout << contents << std::endl; };
+
+        about_ui.add_textbox(
+            text_utils::add_newlines_to_long_string(
+                "this program was created with the toolbox engine, this engine is an open source collection of tools "
+                "which come together to form an engine to make games using c++, it's designed for programmers and just "
+                "gives you tools to do stuff faster in that realm instead of an all encompassing solution. Learn more "
+                "about it at cpptbx.cuppajoeman.com and join the discord."),
+            0, 0, 1, 1, colors::grey18);
+
+        about_ui.add_clickable_textbox(on_back_clicked, on_hover, "back to main menu", -0.65, -0.65, 0.5, 0.5,
+                                       colors::seagreen, colors::grey);
+
+        return about_ui;
     }
 
     UI create_in_game_ui() {
