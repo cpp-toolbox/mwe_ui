@@ -84,9 +84,29 @@ glm::vec2 get_ndc_mouse_pos(GLFWwindow *window, double xpos, double ypos) {
     return {(2.0f * xpos) / width - 1.0f, 1.0f - (2.0f * ypos) / height};
 }
 
-int main() {
+void render_ui(Window &window, InputGraphicsSoundMenu &input_graphics_sound_menu, UIRenderSuiteImpl &ui_render_suite) {
+    auto ndc_mouse_pos = get_ndc_mouse_pos(window.glfw_window, mouse_position_x, mouse_position_y);
 
-    UIState curr_state = UIState::MAIN_MENU;
+    std::vector<UIState> uis_to_render = {input_graphics_sound_menu.curr_state};
+    for (const auto &ui_state : input_graphics_sound_menu.get_ui_dependencies(input_graphics_sound_menu.curr_state)) {
+        uis_to_render.push_back(ui_state);
+    }
+
+    for (const auto &ui_state : uis_to_render) {
+        if (input_graphics_sound_menu.game_state_to_ui.find(ui_state) !=
+            input_graphics_sound_menu.game_state_to_ui.end()) {
+            UI &selected_ui = input_graphics_sound_menu.game_state_to_ui.at(ui_state);
+
+            process_key_pressed_this_tick(selected_ui); // TODO: because I yet use the
+                                                        // InputState need to use that instead soon.
+
+            process_and_queue_render_ui(ndc_mouse_pos, selected_ui, ui_render_suite, {}, false, false,
+                                        mouse_just_clicked);
+        }
+    }
+}
+
+int main() {
 
     std::unordered_map<SoundType, std::string> sound_type_to_file = {
         {SoundType::UI_HOVER, "assets/sounds/hover.wav"},
@@ -127,25 +147,12 @@ int main() {
     // using this to save our configuration for the future.
     Configuration configuration("assets/config/user_cfg.ini", {}, false);
 
-    configuration.register_config_handler("graphics", "resolution",
-                                          [&](const std::string resolution) { window.set_resolution(resolution); });
-
-    configuration.register_config_handler("graphics", "fullscreen",
-                                          [&](const std::string value) { window.set_fullscreen_by_on_off(value); });
-
-    configuration.apply_config_logic();
-
     bool start_in_fullscreen = false;
 
     std::vector<ShaderType> requested_shaders = {ShaderType::ABSOLUTE_POSITION_WITH_COLORED_VERTEX};
 
     ShaderCache shader_cache(requested_shaders);
     Batcher batcher(shader_cache);
-
-    glm::mat4 projection = glm::mat4(1);
-    auto text_color = glm::vec3(0.5, 0.5, 1);
-    float char_width = 0.5;
-    float edge_transition = 0.1;
 
     // glDisable(GL_DEPTH_TEST);
     glEnable(GL_DEPTH_TEST);
@@ -157,19 +164,7 @@ int main() {
 
     UIRenderSuiteImpl ui_render_suite(batcher);
 
-    InputGraphicsSoundMenu input_graphics_sound_menu(curr_state, window.glfw_window, batcher, sound_system,
-                                                     configuration);
-
-    std::map<UIState, UI> game_state_to_ui = {
-        {UIState::MAIN_MENU, input_graphics_sound_menu.main_menu_ui},
-        {UIState::IN_GAME, input_graphics_sound_menu.in_game_ui},
-        {UIState::SETTINGS_MENU, input_graphics_sound_menu.settings_menu_ui},
-        {UIState::PLAYER_SETTINGS, input_graphics_sound_menu.player_settings_ui},
-        {UIState::INPUT_SETTINGS, input_graphics_sound_menu.input_settings_ui},
-        {UIState::SOUND_SETTINGS, input_graphics_sound_menu.sound_settings_ui},
-        {UIState::GRAPHICS_SETTINGS, input_graphics_sound_menu.graphics_settings_ui},
-        {UIState::ADVANCED_SETTINGS, input_graphics_sound_menu.advanced_settings_ui},
-    };
+    InputGraphicsSoundMenu input_graphics_sound_menu(window, batcher, sound_system, configuration);
 
     // TODO: was debugging this I believe instead we have to use the window.width stuff here instead
 
@@ -177,24 +172,7 @@ int main() {
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        auto ndc_mouse_pos = get_ndc_mouse_pos(window.glfw_window, mouse_position_x, mouse_position_y);
-
-        std::vector<UIState> uis_to_render = {curr_state};
-        for (const auto &ui_state : input_graphics_sound_menu.get_ui_dependencies(curr_state)) {
-            uis_to_render.push_back(ui_state);
-        }
-
-        for (const auto &ui_state : uis_to_render) {
-            if (game_state_to_ui.find(ui_state) != game_state_to_ui.end()) {
-                UI &selected_ui = game_state_to_ui.at(ui_state);
-
-                process_key_pressed_this_tick(selected_ui); // because I yet use the
-                                                            // InputState
-
-                process_and_queue_render_ui(ndc_mouse_pos, selected_ui, ui_render_suite, {}, false, false,
-                                            mouse_just_clicked);
-            }
-        }
+        render_ui(window, input_graphics_sound_menu, ui_render_suite);
 
         batcher.absolute_position_with_colored_vertex_shader_batcher.draw_everything();
 

@@ -33,8 +33,7 @@ class InputGraphicsSoundMenu {
     SoundSystem &sound_system;
     Batcher &batcher;
     Configuration &configuration;
-    GLFWwindow *window;
-    UIState &curr_state;
+    Window &window;
 
     std::function<void()> on_hover = [&]() { sound_system.queue_sound(SoundType::UI_HOVER); };
     std::function<void(const std::string)> dropdown_on_hover = [&](const std::string) {
@@ -42,16 +41,37 @@ class InputGraphicsSoundMenu {
     };
 
   public:
-    UI main_menu_ui, in_game_ui, settings_menu_ui, player_settings_ui, input_settings_ui, sound_settings_ui,
-        graphics_settings_ui credits_menu_ui, advanced_settings_ui;
+    UIState curr_state = UIState::MAIN_MENU;
 
-    InputGraphicsSoundMenu(UIState &curr_state, GLFWwindow *window, Batcher &batcher, SoundSystem &sound_system,
-                           Configuration &configuration)
-        : curr_state(curr_state), window(window), batcher(batcher), sound_system(sound_system),
-          configuration(configuration), main_menu_ui(create_main_menu_ui()), in_game_ui(create_in_game_ui()),
+    UI main_menu_ui, in_game_ui, settings_menu_ui, player_settings_ui, input_settings_ui, sound_settings_ui,
+        graphics_settings_ui, advanced_settings_ui;
+
+    std::map<UIState, UI &> game_state_to_ui = {
+        {UIState::MAIN_MENU, main_menu_ui},
+        {UIState::IN_GAME, in_game_ui},
+        {UIState::SETTINGS_MENU, settings_menu_ui},
+        {UIState::PLAYER_SETTINGS, player_settings_ui},
+        {UIState::INPUT_SETTINGS, input_settings_ui},
+        {UIState::SOUND_SETTINGS, sound_settings_ui},
+        {UIState::GRAPHICS_SETTINGS, graphics_settings_ui},
+        {UIState::ADVANCED_SETTINGS, advanced_settings_ui},
+    };
+
+    InputGraphicsSoundMenu(Window &window, Batcher &batcher, SoundSystem &sound_system, Configuration &configuration)
+        : window(window), batcher(batcher), sound_system(sound_system), configuration(configuration),
+          main_menu_ui(create_main_menu_ui()), in_game_ui(create_in_game_ui()),
           settings_menu_ui(create_settings_menu_ui()), player_settings_ui(create_player_settings_ui()),
           input_settings_ui(create_input_settings_ui()), sound_settings_ui(create_sound_settings_ui()),
-          graphics_settings_ui(create_graphics_settings_ui()), advanced_settings_ui(create_advanced_settings_ui()) {};
+          graphics_settings_ui(create_graphics_settings_ui()), advanced_settings_ui(create_advanced_settings_ui()) {
+
+        configuration.register_config_handler("graphics", "resolution",
+                                              [&](const std::string resolution) { window.set_resolution(resolution); });
+
+        configuration.register_config_handler("graphics", "fullscreen",
+                                              [&](const std::string value) { window.set_fullscreen_by_on_off(value); });
+
+        configuration.apply_config_logic();
+    };
 
     std::vector<UIState> get_ui_dependencies(const UIState &ui_state) {
         switch (ui_state) {
@@ -79,6 +99,8 @@ class InputGraphicsSoundMenu {
         return {};
     }
 
+    void render_ui() {}
+
     UI create_main_menu_ui() {
 
         std::function<void()> on_game_start = [&]() {
@@ -91,7 +113,7 @@ class InputGraphicsSoundMenu {
         };
         std::function<void()> on_game_quit = [&]() {
             sound_system.queue_sound(SoundType::UI_CLICK);
-            glfwSetWindowShouldClose(window, GLFW_TRUE);
+            glfwSetWindowShouldClose(window.glfw_window, GLFW_TRUE);
         };
         std::function<void()> on_back_clicked = [&]() {
             sound_system.queue_sound(SoundType::UI_CLICK);

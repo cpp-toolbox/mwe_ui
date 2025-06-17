@@ -73,3 +73,6 @@
 [submodule "src/input/glfw_lambda_callback_manager"]
 	path = src/input/glfw_lambda_callback_manager
 	url = git@github.com:cpp-toolbox/glfw_lambda_callback_manager.git
+[submodule "src/graphics/ui_render_suite_implementation"]
+	path = src/graphics/ui_render_suite_implementation
+	url = git@github.com:cpp-toolbox/ui_render_suite_implementation.git
