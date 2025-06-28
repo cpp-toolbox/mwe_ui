@@ -81,7 +81,7 @@ int main() {
 
     UIRenderSuiteImpl ui_render_suite(batcher);
 
-    InputGraphicsSoundMenu input_graphics_sound_menu(window, batcher, sound_system, configuration);
+    InputGraphicsSoundMenu input_graphics_sound_menu(window, input_state, batcher, sound_system, configuration);
 
     while (!glfwWindowShouldClose(window.glfw_window)) {
 
